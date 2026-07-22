@@ -58,6 +58,17 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
     home = fields.home_world or ""
     arrival = _parse_date(fields.arrival_date)
 
+    # FIELD_MANUAL: visible MIB adjudicator stamp / signed manual note is the
+    # highest-precedence trusted evidence. Train: Finding lines match labels
+    # 162/162 with no counterexamples.
+    if fields.note_finding in {"APPROVED", "DENIED", "NEEDS_REVIEW"}:
+        reasons.append(f"note_finding={fields.note_finding}")
+        if fields.note_finding == "APPROVED":
+            return {"APPROVED": 0.96, "DENIED": 0.02, "NEEDS_REVIEW": 0.02}, reasons
+        if fields.note_finding == "DENIED":
+            return {"APPROVED": 0.02, "DENIED": 0.96, "NEEDS_REVIEW": 0.02}, reasons
+        return {"APPROVED": 0.02, "DENIED": 0.02, "NEEDS_REVIEW": 0.96}, reasons
+
     # Soft uncertainty boosters (shift mass toward REVIEW without forcing DENY)
     uncertainty = 0.0
     if fields.used_ocr:
@@ -146,6 +157,12 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
     if fee not in {"paid", "waived"}:
         review = True
         reasons.append(f"fee_not_clear={fee}")
+
+    # FIELD_MANUAL: MED-3 requires a clean biohazard check. If we never saw a
+    # B-13 / Observed-flags line, do not APPROVE — residual REVIEW.
+    if visa == "MED-3" and "risk_flags" not in fields.sources:
+        review = True
+        reasons.append("MED-3_missing_biometric")
 
     if review:
         p_r = max(0.80, 0.93 - uncertainty * 0.3)

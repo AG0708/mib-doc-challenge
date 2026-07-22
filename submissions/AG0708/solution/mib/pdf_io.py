@@ -48,6 +48,7 @@ PAGE_TYPE_MARKERS = [
     ("FORM I-8090", "intake"),
     ("MIB Fee Receipt", "fee"),
     ("MIBFeeReceipt", "fee"),
+    ("MIB Fee Recelpt", "fee"),
     ("Planetary Registry Extract", "registry"),
     ("FORM B-13", "biometric"),
     ("FORMB-13", "biometric"),
@@ -152,6 +153,7 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"FORMB-13", "FORM B-13"),
         (r"FORMI-8090", "FORM I-8090"),
         (r"MIBFeeReceipt", "MIB Fee Receipt"),
+        (r"MIB Fee Recelpt", "MIB Fee Receipt"),
         (r"MIB Feo Receipt", "MIB Fee Receipt"),
         (r"MIB Fse Receipt", "MIB Fee Receipt"),
         (r"CaseID:", "Case ID: "),
@@ -160,10 +162,12 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"Cese ID:", "Case ID: "),
         (r"FeeStatus:", "Fee Status: "),
         (r"FeeStatus", "Fee Status "),
+        (r"Fee Stus", "Fee Status"),
         (r"Feo Status", "Fee Status"),
         (r"Fee Stabus", "Fee Status"),
         (r"Fee Stabuac", "Fee Status"),
         (r"Feo Stabus", "Fee Status"),
+        (r"Fee Stus:", "Fee Status: "),
         (r"Observedflags:", "Observed flags: "),
         (r"Cbserved flaga:", "Observed flags: "),
         (r"Cbserved flags:", "Observed flags: "),
@@ -270,15 +274,6 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                                 or re.search(r"Fee|paid|waiv|Observed|SPN|Home World|Visa", rendered, re.I)
                             ):
                                 ocr_text = rendered if len(rendered) >= len(ocr_text) else ocr_text
-                    except Exception:
-                        pass
-                # If still thin, try a higher-DPI render once for scan-heavy pages
-                if (not ocr_text or len(ocr_text) < 40) and not text_only:
-                    try:
-                        if any(True for info in page.get_images(full=True) if info[2] >= 800 and info[3] >= 800):
-                            rendered = _ocr_page_render(page, dpi=max(ocr_dpi, 160))
-                            if len(rendered) > len(ocr_text or ""):
-                                ocr_text = rendered
                     except Exception:
                         pass
                 if ocr_text:

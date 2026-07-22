@@ -66,6 +66,10 @@ FEE_TOKEN_MAP = {
     "unpald": "unpaid",
     "unpold": "unpaid",
     "unpad": "unpaid",
+    "unpod": "unpaid",
+    "upold": "unpaid",
+    "upald": "unpaid",
+    "upad": "unpaid",
     "unknown": "unknown",
     "unknawn": "unknown",
     "unknow": "unknown",
@@ -150,7 +154,7 @@ INLINE_PATTERNS = [
     # OCR often mangles "Fee Status" → "Fe Status" / "Fee Stabus" / "Feo Status"
     # and "waived" → "waved", "paid" → "pald"/"pold".
     (re.compile(
-        r"Fe[eo]?\s*Sta[bt]u[sae]*\s*[:.]?\s*(paid|pald|pold|pod|pad|waived|waved|walved|unpaid|unpald|unpold|unknown)",
+        r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*(un?p[ao]l?d|paid|pald|pold|pod|pad|waived|waved|walved|unknown)",
         re.I,
     ), "fee_status"),
     (re.compile(r"Observed\s*flags:\s*(.+)", re.I), "risk_flags"),
@@ -179,13 +183,13 @@ OCR_INLINE_KV = [
     (re.compile(r"\bSponsor ID\s+(SPN-\d{4})\b", re.I), "sponsor_id"),
     (re.compile(r"\bArr?ival\s*Date\s*[:.]?\s*(\d{4}[-./]\d{2}[-./]\d{2}|UNREADABLE)\b", re.I), "arrival_date"),
     (re.compile(
-        r"\bFe[eo]?\s*Sta[bt]u[sae]*\s*[:.]?\s*(paid|pald|pold|pod|pad|waived|waved|walved|unpaid|unpald|unpold|unknown)\b",
+        r"\bFe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*(un?p[ao]l?d|paid|pald|pold|pod|pad|waived|waved|walved|unknown)\b",
         re.I,
     ), "fee_status"),
     (re.compile(r"\bSpecies Code\s+([A-Z][A-Z_]+)\b"), "species_code"),
     (re.compile(r"\bDeclared Purpose\s+(archive audit|cultural exchange|diplomatic|field repair|medical consult|reactor maintenance|research|transit|translation|xenobotany)\b", re.I), "declared_purpose"),
     (re.compile(r"\b(?:Observed|Cbserved|ved)\s*(?:flags|flogs|flaga):\s*(.+)", re.I), "risk_flags"),
-    (re.compile(r"\b(paid|pald|pold|pod|waived|waved|walved|unpaid|unpald|unknown)\b", re.I), "fee_status_weak"),
+    (re.compile(r"\b(un?p[ao]l?d|paid|pald|pold|pod|waived|waved|walved|unknown)\b", re.I), "fee_status_weak"),
 ]
 
 LABEL_WORDS = {
@@ -228,6 +232,11 @@ def _clean_value(field: str, value: str) -> str | None:
         # Exact token match — never substring ("paid" is inside "unpaid").
         token = low.split()[0] if low.split() else low
         token = token.strip(".,;:")
+        # Prefer unpaid* before paid* (unpold contains pold)
+        if token.startswith("unp") or token in {"upold", "upald", "upad", "upod"} or "unpaid" in token:
+            for cand in ("unpaid", "unpald", "unpold", "unpad", "unpod", "upold", "upald"):
+                if token == cand or SequenceMatcher(None, re.sub(r"[^a-z]", "", token), cand).ratio() >= 0.75:
+                    return "unpaid"
         if token in FEE_TOKEN_MAP:
             return FEE_TOKEN_MAP[token]
         if token in FEE_STATUSES:
@@ -828,7 +837,11 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     if result.fee_obscured and not result.fee_status:
         result.fee_status = "unknown"
         result.evidence_needs_review = True
-    if note_review and note_finding == "NEEDS_REVIEW":
+    if note_finding == "NEEDS_REVIEW":
+        # Train: Finding NEEDS_REVIEW notes are 50/50 exact matches to label
+        # NEEDS_REVIEW (never false). Treat as document-level evidence issue.
+        result.evidence_needs_review = True
+    elif note_review and note_finding == "NEEDS_REVIEW":
         # Soft signal only when we also lack key fields or have conflicts
         if result.arrival_unreadable or conflicts or result.fee_status == "unknown":
             result.evidence_needs_review = True
