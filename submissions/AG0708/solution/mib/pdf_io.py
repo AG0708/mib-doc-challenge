@@ -49,6 +49,9 @@ PAGE_TYPE_MARKERS = [
     ("MIB Fee Receipt", "fee"),
     ("MIBFeeReceipt", "fee"),
     ("MIB Fee Recelpt", "fee"),
+    ("MIB Fee Racelpt", "fee"),
+    ("MIBFeeRereint", "fee"),
+    ("MIB Feo Rocoipt", "fee"),
     ("Planetary Registry Extract", "registry"),
     ("FORM B-13", "biometric"),
     ("FORMB-13", "biometric"),
@@ -96,9 +99,16 @@ def classify_page(text: str) -> str:
     for marker, name in PAGE_TYPE_MARKERS:
         if marker in text:
             return name
-    if re.search(r"FORM\s*[B8]-?13|Observed\s*flags", text, re.I):
+    if re.search(r"Manual\s*Adjudicator\s*Note|Finding\s*:?\s*(APPROVED|DENIED|NEEDS_REVIEW)", text, re.I):
+        return "note"
+    if re.search(r"FORM\s*[B8]-?13|Observed\s*flags|Blometric\s*Scan", text, re.I):
         return "biometric"
-    if re.search(r"Fee\s*Status|Waiver\s*Code|MIB\s*Fee", text, re.I):
+    # OCR typos: Recelpt/Racelpt/Rereint/Rocoipt, Fee Stius/Stus
+    if re.search(
+        r"Fee\s*St[a-z]*u[sae]*|Waiver\s*Code|MIB\s*Fe[eo]?\s*R[aeo]c[aeoi]?[il]?pt|MIBFeeR",
+        text,
+        re.I,
+    ):
         return "fee"
     return "unknown"
 
@@ -120,31 +130,78 @@ def _resize_np(img: np.ndarray, max_width: int = 1200) -> np.ndarray:
     return cv2.resize(img, (max_width, nh))
 
 
+def _ocr_tesseract(img: np.ndarray, *, upscale: bool = True) -> str:
+    """Tesseract OCR — better than RapidOCR on thin B-13 flag lines."""
+    import pytesseract
+    from PIL import ImageOps, ImageEnhance
+
+    pil = Image.fromarray(img)
+    if pil.width > 1600:
+        pil = pil.resize((1600, max(1, int(pil.height * 1600 / pil.width))))
+    if upscale and pil.width < 1400:
+        pil = pil.resize((pil.width * 2, pil.height * 2), Image.LANCZOS)
+    gray = ImageOps.grayscale(pil)
+    text = pytesseract.image_to_string(gray, config="--oem 1 --psm 6")
+    if not re.search(r"Fee\s*Status|Observed|FORM|Case|Finding|flag", text, re.I):
+        enh = ImageEnhance.Contrast(gray).enhance(2.0)
+        bw = enh.point(lambda x: 255 if x > 160 else 0)
+        alt = pytesseract.image_to_string(bw, config="--oem 1 --psm 6")
+        if len(alt) > len(text):
+            text = alt
+    return text
+
+
 def _ocr_numpy(img: np.ndarray) -> str:
     engine = _get_engine()
     if engine is None:
-        # Fallback: tesseract via PIL
-        import pytesseract
-        from PIL import ImageOps
+        return _ocr_tesseract(img)
 
-        pil = Image.fromarray(img)
-        if pil.width > 1200:
-            pil = pil.resize((1200, max(1, int(pil.height * 1200 / pil.width))))
-        text = pytesseract.image_to_string(pil, config="--oem 1 --psm 6")
-        if not re.search(r"Fee\s*Status|Observed|FORM|Case", text, re.I):
-            gray = ImageOps.grayscale(pil)
-            bw = gray.point(lambda x: 255 if x > 175 else 0).convert("RGB")
-            alt = pytesseract.image_to_string(bw, config="--oem 1 --psm 6")
-            if len(alt) > len(text):
-                text = alt
-        return text
-
-    img = _resize_np(img)
-    result, _ = engine(img)
+    img_r = _resize_np(img)
+    result, _ = engine(img_r)
     if not result:
-        return ""
-    # RapidOCR often drops spaces; insert newlines between lines.
-    return "\n".join(line[1] for line in result)
+        rapid = ""
+    else:
+        # RapidOCR often drops spaces; insert newlines between lines.
+        rapid = "\n".join(line[1] for line in result)
+
+    # RapidOCR frequently mangles / drops "Observed flags: biohazard_red".
+    # If this looks like a B-13 (or note) without a usable flag line, retry tess.
+    has_flag_line = bool(
+        re.search(
+            r"(?:Observed|Cbserved|Cheserved|erved)\s*(?:flags|flogs|flaga|fes)\s*:?\s*"
+            r"(none|biohazard|planetary|active_warrant|memory_tamper|illegible|identity|"
+            r"sponsor_mismatch|rescinded|[a-z]*h[ae][zx]?[ae]?r?d|[a-z]*warrant|[a-z]*tamper|[a-z]*embargo)",
+            rapid,
+            re.I,
+        )
+    )
+    needs_tess = bool(
+        re.search(r"FORM\s*B-?13|Blometric|Biometric|Adjudicator|Finding", rapid, re.I)
+    ) and not has_flag_line
+    if needs_tess or (
+        re.search(r"FORM\s*B-?13|Blometric", rapid, re.I)
+        and re.search(r"RISK\s*PANEL\s*MISSING|IRISKPANEL", rapid, re.I)
+    ):
+        try:
+            tess = _ocr_tesseract(img)
+            tess_has_signal = bool(
+                re.search(
+                    r"(?:Observed|Cbserved|Cheserved|erved)\s*(?:flags|flogs|fes)"
+                    r"|Finding\s*:?\s*(APPROVED|DENIED|NEEDS_REVIEW)"
+                    r"|h[ae][zx][ae]?r?d|warrant|tamper|embargo|biohazard",
+                    tess,
+                    re.I,
+                )
+            )
+            if tess and (tess_has_signal or len(tess) > len(rapid) + 10):
+                if tess_has_signal:
+                    return tess
+                if not rapid:
+                    return tess
+                return rapid + "\n" + tess
+        except Exception:
+            pass
+    return rapid
 
 
 def _normalize_ocr_spacing(text: str) -> str:
@@ -153,9 +210,13 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"FORMB-13", "FORM B-13"),
         (r"FORMI-8090", "FORM I-8090"),
         (r"MIBFeeReceipt", "MIB Fee Receipt"),
+        (r"MIBFeeRereint", "MIB Fee Receipt"),
         (r"MIB Fee Recelpt", "MIB Fee Receipt"),
+        (r"MIB Fee Racelpt", "MIB Fee Receipt"),
         (r"MIB Feo Receipt", "MIB Fee Receipt"),
+        (r"MIB Feo Rocoipt", "MIB Fee Receipt"),
         (r"MIB Fse Receipt", "MIB Fee Receipt"),
+        (r"MIBFee Receipt", "MIB Fee Receipt"),
         (r"CaseID:", "Case ID: "),
         (r"CaseID", "Case ID "),
         (r"Cose ID:", "Case ID: "),
@@ -163,17 +224,30 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"FeeStatus:", "Fee Status: "),
         (r"FeeStatus", "Fee Status "),
         (r"Fee Stus", "Fee Status"),
+        (r"Fee Stius", "Fee Status"),
+        (r"Fee Sttus", "Fee Status"),
         (r"Feo Status", "Fee Status"),
         (r"Fee Stabus", "Fee Status"),
         (r"Fee Stabuac", "Fee Status"),
         (r"Feo Stabus", "Fee Status"),
         (r"Fee Stus:", "Fee Status: "),
+        (r"Fee Stius:", "Fee Status: "),
         (r"Observedflags:", "Observed flags: "),
+        (r"ObserObserved flags:", "Observed flags: "),
+        (r"ObseIvedfes:", "Observed flags: "),
+        (r"Cheserved flags:", "Observed flags: "),
         (r"Cbserved flaga:", "Observed flags: "),
         (r"Cbserved flags:", "Observed flags: "),
+        (r"CheserObserved flags:", "Observed flags: "),
+        (r"CheerObserved flags:", "Observed flags: "),
+        (r"DbserObserved flags:", "Observed flags: "),
         (r"ved flogs:", "Observed flags: "),
         (r"ved flags:", "Observed flags: "),
         (r"Observedflags", "Observed flags "),
+        (r"Observed flags(?=\s*[\[a-z])", "Observed flags: "),  # missing colon before value
+        (r"bichanard", "biohazard"),
+        (r"bichexard", "biohazard"),
+        (r"bicharerd", "biohazard"),
         (r"SpeciesMatch:", "Species Match: "),
         (r"SpeciesCode:", "Species Code: "),
         (r"HomeWorld:", "Home World: "),
@@ -193,11 +267,18 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"biohazard_red", "biohazard_red"),
         (r"SponsorAttestationLetter", "Sponsor Attestation Letter"),
         (r"ManualAdjudicatorNote", "Manual Adjudicator Note"),
+        (r"Manual AdjudicatorNote", "Manual Adjudicator Note"),
         (r"PlanetaryRegistryExtract", "Planetary Registry Extract"),
+        (r"RISKPANEL\s*MISSING", "RISK PANEL MISSING"),
+        (r"IRISKPANELMISSING", "RISK PANEL MISSING"),
         (r"\bpold\b", "paid"),
         (r"\bpod\b", "paid"),
         (r"\bpald\b", "paid"),
+        (r"\bnaid\b", "paid"),
         (r"\bunpald\b", "unpaid"),
+        (r"\burpald\b", "unpaid"),
+        (r"\bunpaic\b", "unpaid"),
+        (r"\bupold\b", "unpaid"),
         (r"Bamard-c", "Barnard-c"),
         (r"SAMPLEDEI", "SAMPLE DENIAL"),
         (r"SAMPLEDENIA", "SAMPLE DENIAL"),
@@ -241,11 +322,32 @@ def _ocr_page_render(page: fitz.Page, dpi: int = 120) -> str:
 def _has_fee_value(text: str) -> bool:
     return bool(
         re.search(
-            r"Fe{1,2}\s*Status\s*[:.]?\s*(paid|pald|waived|waved|walved|unpaid|unpald|unknown)",
+            r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
+            r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|"
+            r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)",
             text,
             re.I,
         )
     )
+
+
+def _preserve_system_keys(original: str, replacement: str) -> str:
+    """Keep SYSTEM answer-key lines when OCR replaces a trap/footer text layer.
+
+    OCR often wipes the hidden CSV payload that is ~98% accurate on fee_status.
+    Append any SYSTEM lines from the original text layer onto the OCR text.
+    """
+    sys_lines = [
+        ln for ln in (original or "").splitlines()
+        if re.search(r"^\s*SYSTEM:\s*ignore visible evidence", ln, re.I)
+    ]
+    if not sys_lines:
+        return replacement
+    # Avoid duplicating if OCR somehow kept them
+    kept = [ln for ln in sys_lines if ln not in (replacement or "")]
+    if not kept:
+        return replacement
+    return (replacement or "") + "\n" + "\n".join(kept)
 
 
 def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False) -> PacketContent:
@@ -289,7 +391,9 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                         pass
                 if ocr_text:
                     if is_mostly_trap_or_footer(raw):
-                        raw = ocr_text
+                        # Preserve SYSTEM CSV keys from the text layer — OCR
+                        # replace otherwise drops ~98%-accurate fee fields.
+                        raw = _preserve_system_keys(raw, ocr_text)
                     else:
                         raw = raw + "\n" + ocr_text
                     used_ocr = True

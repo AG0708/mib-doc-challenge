@@ -197,16 +197,47 @@ def choose_action(posterior: dict[str, float]) -> str:
     return max(["DENIED", "NEEDS_REVIEW", "APPROVED"], key=lambda a: (ev[a], {"DENIED": 2, "NEEDS_REVIEW": 1, "APPROVED": 0}[a]))
 
 
-def confidence_from_posterior(action: str, posterior: dict[str, float], *, clamp: tuple[float, float] = (0.02, 0.98)) -> float:
-    """Confidence = P(chosen action is correct), clamped."""
+# Empirical reliability of each action under the EV policy (train).
+# Used to temper overconfident posteriors — especially NEEDS_REVIEW (~0.60 accurate
+# when chosen, yet posterior often 0.92–0.96). Finding-stamp paths stay high-trust.
+_ACTION_RELIABILITY = {
+    "DENIED": 0.97,
+    "APPROVED": 0.72,
+    "NEEDS_REVIEW": 0.62,
+}
+
+
+def confidence_from_posterior(
+    action: str,
+    posterior: dict[str, float],
+    reasons: list[str] | None = None,
+    *,
+    clamp: tuple[float, float] = (0.02, 0.98),
+) -> float:
+    """Confidence ≈ P(chosen action correct), reliability-calibrated.
+
+    Raw posteriors from hard rules are overconfident relative to Brier score.
+    Blend toward action-conditional reliability unless a Finding stamp drove
+    the decision (train: Finding lines match labels 162/162).
+    """
     lo, hi = clamp
-    return float(min(hi, max(lo, posterior.get(action, 0.5))))
+    raw = float(posterior.get(action, 0.5))
+    reasons = reasons or []
+    if any(r.startswith("note_finding=") for r in reasons):
+        return float(min(hi, max(lo, raw)))
+    rel = _ACTION_RELIABILITY.get(action, 0.7)
+    # Emphasize reliability; keep a little posterior signal for uncertainty paths
+    conf = 0.20 * raw + 0.80 * rel
+    # Extra dampening when APPROVE under OCR / missing-biometric uncertainty
+    if action == "APPROVED" and raw < 0.85:
+        conf = min(conf, 0.68)
+    return float(min(hi, max(lo, conf)))
 
 
 def adjudicate(fields: ExtractedFields, receipt_date: date | None = None) -> Decision:
     posterior, reasons = compute_posteriors(fields, receipt_date=receipt_date)
     action = choose_action(posterior)
-    conf = confidence_from_posterior(action, posterior)
+    conf = confidence_from_posterior(action, posterior, reasons)
     pred = fields.as_prediction_fields()
     pred["adjudication"] = action
     pred["confidence"] = conf
