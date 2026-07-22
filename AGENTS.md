@@ -1,0 +1,47 @@
+# AGENTS.md
+
+## Cursor Cloud specific instructions
+
+This repo is the **scoring/benchmark harness** for the "MIB Doc Challenge" — an offline,
+Dockerized PDF document-extraction challenge. It is **not a running web app or service**; there
+are no ports, databases, or long-lived processes. You exercise it by running CLI scripts and by
+building/running candidate submission Docker images. Candidate solutions live in separate repos.
+
+### Language / dependencies
+- Python **3.12** (harness scripts use only the standard library).
+- The only third-party dependency is `jsonschema`, and it is optional — it only enables the
+  schema-validation unit tests (`tests/test_public_contract.py` skips them if it is absent). The
+  update script installs it so the full test suite runs.
+
+### Lint / test / build / run
+- **Lint:** no linter is configured in this repo (no ruff/flake8/black/pyproject). CI
+  (`.github/workflows/public-contract.yml`) only runs the unit tests.
+- **Test:** `python3 -m unittest discover -s tests -v` (5 tests; all should pass).
+- **Build/run the "application":** the product flow is documented in `README.md` (Quick Start) and
+  `DOCKER_SUBMISSION.md`. It is: build a submission image → run it offline against a folder of PDFs
+  to produce `predictions.jsonl` → `scripts/validate_submission.py` → `scripts/evaluate.py`.
+  `examples/offline_baseline/` is a tiny format-valid submission useful for smoke tests.
+
+### Docker (needed for the submission contract)
+- Docker is installed in the VM snapshot but **not managed by systemd**. Start the daemon before
+  using it, e.g. in a tmux session: `sudo dockerd > /tmp/dockerd.log 2>&1 &`. Verify with
+  `sudo docker info`. Docker commands here require `sudo`.
+- The daemon is configured for this nested VM: `fuse-overlayfs` storage driver and
+  `containerd-snapshotter` disabled (`/etc/docker/daemon.json`), with iptables set to legacy.
+- The base image `python:3.12-slim` is pre-pulled. Submissions must run offline; use
+  `docker run --network none ...` exactly as in the README.
+
+### Known caveat: resource-limit flags don't work here
+`scripts/run_docker_submission.py` always passes `--memory`/`--cpus`/`--pids-limit`. In this
+environment the host delegates a **cgroup v2 "threaded" subtree** (root `cgroup.type` is
+`domain threaded`, only `cpuset cpu pids` controllers are available — no `memory`). Applying a
+memory limit fails with `cannot enter cgroupv2 ... it is in threaded mode`. This is an environment
+limitation, not a repo bug. To run the E2E here, use the plain README Quick Start command
+(`docker run --rm --network none --mount ... <image> /input /output/predictions.jsonl`) which does
+not set cgroup limits, then run `evaluate.py` on the output.
+
+### Data
+- The bulk PDF dataset (`data/train/`, `data/validation/`) is **not in the repo**; download it from
+  Hugging Face per `data/README.md`. Only the label/manifest CSVs ship in-repo.
+- The baseline submission only reads PDF *filenames* (case IDs), so for a quick smoke test you can
+  create empty `.pdf` files named after case IDs from `data/train_labels.csv` and score against it.
