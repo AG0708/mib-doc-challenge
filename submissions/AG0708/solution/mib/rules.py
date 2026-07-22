@@ -154,13 +154,14 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
 
     # Clean APPROVE path
     reasons.append("clean_approve")
-    # If biometric flags were never observed, keep more mass on REVIEW so
-    # argmax-EV prefers REVIEW over a risky APPROVE (false-approval = −4).
+    # Only treat biometric flags as missing when we never observed a B-13 /
+    # Observed-flags line. used_ocr alone is not enough (registry OCR is common).
     missing_bio = fields.used_ocr and "risk_flags" not in fields.sources
     if missing_bio:
-        p_a = max(0.40, 0.72 - uncertainty)
+        p_a = max(0.55, 0.78 - uncertainty * 0.5)
         rem = 1.0 - p_a
-        return {"APPROVED": p_a, "DENIED": rem * 0.25, "NEEDS_REVIEW": rem * 0.75}, reasons
+        # EV: keep APPROVE competitive vs REVIEW when packet otherwise looks clean
+        return {"APPROVED": p_a, "DENIED": rem * 0.35, "NEEDS_REVIEW": rem * 0.65}, reasons
     p_a = max(0.80, 0.96 - uncertainty)
     rem = 1.0 - p_a
     return {"APPROVED": p_a, "DENIED": rem * 0.4, "NEEDS_REVIEW": rem * 0.6}, reasons

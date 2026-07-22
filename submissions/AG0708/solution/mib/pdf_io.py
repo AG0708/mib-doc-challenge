@@ -152,11 +152,21 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"FORMB-13", "FORM B-13"),
         (r"FORMI-8090", "FORM I-8090"),
         (r"MIBFeeReceipt", "MIB Fee Receipt"),
+        (r"MIB Feo Receipt", "MIB Fee Receipt"),
+        (r"MIB Fse Receipt", "MIB Fee Receipt"),
         (r"CaseID:", "Case ID: "),
         (r"CaseID", "Case ID "),
+        (r"Cose ID:", "Case ID: "),
+        (r"Cese ID:", "Case ID: "),
         (r"FeeStatus:", "Fee Status: "),
         (r"FeeStatus", "Fee Status "),
+        (r"Feo Status", "Fee Status"),
+        (r"Fee Stabus", "Fee Status"),
+        (r"Fee Stabuac", "Fee Status"),
+        (r"Feo Stabus", "Fee Status"),
         (r"Observedflags:", "Observed flags: "),
+        (r"Cbserved flaga:", "Observed flags: "),
+        (r"Cbserved flags:", "Observed flags: "),
         (r"ved flogs:", "Observed flags: "),
         (r"ved flags:", "Observed flags: "),
         (r"Observedflags", "Observed flags "),
@@ -175,15 +185,23 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"SCANIMAGE", "SCAN IMAGE"),
         (r"PASSPORTIMAGE", "PASSPORT IMAGE"),
         (r"REGISTRYIMAGE", "REGISTRY IMAGE"),
+        (r"REGISTRYINAGE", "REGISTRY IMAGE"),
         (r"biohazard_red", "biohazard_red"),
         (r"SponsorAttestationLetter", "Sponsor Attestation Letter"),
         (r"ManualAdjudicatorNote", "Manual Adjudicator Note"),
         (r"PlanetaryRegistryExtract", "Planetary Registry Extract"),
+        (r"\bpold\b", "paid"),
+        (r"\bpod\b", "paid"),
+        (r"\bpald\b", "paid"),
+        (r"\bunpald\b", "unpaid"),
+        (r"Bamard-c", "Barnard-c"),
+        (r"SAMPLEDEI", "SAMPLE DENIAL"),
+        (r"SAMPLEDENIA", "SAMPLE DENIAL"),
     ]
     for pat, rep in replacements:
         text = re.sub(pat, rep, text, flags=re.I)
     # Spacing around SPN/MIB tokens
-    text = re.sub(r"(SPN-\d{4})", r" \1 ", text)
+    text = re.sub(r"(SPN-?\d{4})", lambda m: " " + m.group(1).replace("SPN", "SPN-").replace("SPN--", "SPN-") + " ", text)
     text = re.sub(r"(MIB-\d{6})", r" \1 ", text)
     return text
 
@@ -201,7 +219,9 @@ def _ocr_embedded_images(doc: fitz.Document, page: fitz.Page) -> str:
         try:
             arr = _pixmap_to_np(pix)
             text = _normalize_ocr_spacing(_ocr_numpy(arr))
-            if any(m in text for m in USEFUL_MARKERS) or re.search(r"MIB-\d{6}|SPN-\d{4}|Observed", text):
+            if any(m in text for m in USEFUL_MARKERS) or re.search(
+                r"MIB-\d{6}|SPN-?\d{4}|Observed|Fee|paid|waiv|flag", text, re.I
+            ):
                 chunks.append(text)
         except Exception:
             continue
@@ -245,7 +265,19 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                     try:
                         if any(True for info in page.get_images(full=True) if info[2] >= 400 and info[3] >= 400):
                             rendered = _ocr_page_render(page, dpi=ocr_dpi)
-                            if any(m in rendered for m in USEFUL_MARKERS):
+                            if (
+                                any(m in rendered for m in USEFUL_MARKERS)
+                                or re.search(r"Fee|paid|waiv|Observed|SPN|Home World|Visa", rendered, re.I)
+                            ):
+                                ocr_text = rendered if len(rendered) >= len(ocr_text) else ocr_text
+                    except Exception:
+                        pass
+                # If still thin, try a higher-DPI render once for scan-heavy pages
+                if (not ocr_text or len(ocr_text) < 40) and not text_only:
+                    try:
+                        if any(True for info in page.get_images(full=True) if info[2] >= 800 and info[3] >= 800):
+                            rendered = _ocr_page_render(page, dpi=max(ocr_dpi, 160))
+                            if len(rendered) > len(ocr_text or ""):
                                 ocr_text = rendered
                     except Exception:
                         pass
