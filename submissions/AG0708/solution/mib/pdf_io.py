@@ -259,6 +259,17 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
             raw = page.get_text("text") or ""
             used_ocr = False
             need_ocr = (not text_only) and (force_ocr or is_mostly_trap_or_footer(raw))
+            # Also OCR large embedded scans on form pages that only have thumbnails
+            # (biohazard / flag stamps sometimes live only on the raster).
+            if (not text_only) and (not need_ocr):
+                try:
+                    if any(
+                        info[2] >= 1000 and info[3] >= 1000
+                        for info in page.get_images(full=True)
+                    ):
+                        need_ocr = True
+                except Exception:
+                    pass
             if need_ocr:
                 ocr_text = ""
                 try:

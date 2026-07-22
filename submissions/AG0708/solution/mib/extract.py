@@ -740,8 +740,23 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             if key == "risk_flags":
                 ev = sys_best.get(key)
                 if ev and ev.value and ev.value != "none":
-                    if cur in (None, "none"):
-                        result.risk_flags = ev.value
+                    # Prefer SYSTEM flags over a bare "none" from a partial B-13.
+                    if cur in (None, "none") or (
+                        isinstance(cur, str)
+                        and set(cur.split("|")).isdisjoint(set(ev.value.split("|")))
+                        and any(
+                            f in ev.value
+                            for f in (
+                                "biohazard_red",
+                                "planetary_embargo",
+                                "active_warrant",
+                                "memory_tampering",
+                            )
+                        )
+                    ):
+                        result.risk_flags = ev.value if cur in (None, "none") else "|".join(
+                            sorted(set((cur or "none").split("|")) | set(ev.value.split("|")) - {""} - {"none"})
+                        )
                         result.sources["risk_flags"] = "system_fields"
                 continue
             if key == "fee_status":
