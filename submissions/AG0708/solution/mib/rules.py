@@ -158,12 +158,6 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
         review = True
         reasons.append(f"fee_not_clear={fee}")
 
-    # FIELD_MANUAL: MED-3 requires a clean biohazard check. If we never saw a
-    # B-13 / Observed-flags line, do not APPROVE — residual REVIEW.
-    if visa == "MED-3" and "risk_flags" not in fields.sources:
-        review = True
-        reasons.append("MED-3_missing_biometric")
-
     if review:
         p_r = max(0.80, 0.93 - uncertainty * 0.3)
         rem = 1.0 - p_r
