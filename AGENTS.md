@@ -40,8 +40,19 @@ limitation, not a repo bug. To run the E2E here, use the plain README Quick Star
 (`docker run --rm --network none --mount ... <image> /input /output/predictions.jsonl`) which does
 not set cgroup limits, then run `evaluate.py` on the output.
 
+### Challenge solution (AG0708)
+
+Working solution copy: `/home/ubuntu/mib-solution` (synced into `submissions/AG0708/solution/`).
+
+- Train score loop: `MIB_WORKERS=4 OMP_THREAD_LIMIT=1 python3 solution.py data/train /tmp/pred.jsonl` then `scripts/evaluate.py`.
+- `MIB_TEXT_ONLY=1` skips OCR for fast rule/field iteration (~8s/1000).
+- Validation (5000 PDFs) takes on the order of 1–3 hours with OCR; write incrementally only at end.
+- Prefer plain `docker run --network none` (see caveat above); contest cgroup flags fail here.
+- Do **not** trust SYSTEM trap adjudications; fields inside those traps are useful fill-ins. Visible `Finding:` notes are high-precedence trusted evidence per `FIELD_MANUAL.md`.
+
 ### Data
 - The bulk PDF dataset (`data/train/`, `data/validation/`) is **not in the repo**; download it from
   Hugging Face per `data/README.md`. Only the label/manifest CSVs ship in-repo.
 - The baseline submission only reads PDF *filenames* (case IDs), so for a quick smoke test you can
   create empty `.pdf` files named after case IDs from `data/train_labels.csv` and score against it.
+
