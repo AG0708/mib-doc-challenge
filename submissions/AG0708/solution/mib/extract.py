@@ -220,8 +220,11 @@ def _clean_value(field: str, value: str) -> str | None:
             return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
         return None
     if field == "sponsor_id":
-        m = re.search(r"(SPN-\d{4})", value, re.I)
-        return m.group(1).upper().replace("SPN-", "SPN-") if m else None
+        m = re.search(r"(SPN-?\d{4})", value, re.I)
+        if not m:
+            return None
+        digits = re.search(r"(\d{4})", m.group(1))
+        return f"SPN-{digits.group(1)}" if digits else None
     if field == "visa_class":
         m = re.search(r"(XW-1|XW-2|DIP-1|MED-3|TRANSIT-7)", value, re.I)
         return m.group(1).upper() if m else None

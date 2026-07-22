@@ -18,6 +18,14 @@ def predict_pdf(path: Path | str, *, ocr_dpi: int = 150) -> dict[str, Any]:
     decision = adjudicate(fields)
     pred = decision.fields
     pred["case_id"] = Path(path).stem
+    # Extraction fill: when fee was never recovered, impute the majority class
+    # for DIP-1 (waived) / others (paid). Adjudication already ran on `unknown`
+    # when missing, so this does not change the decision — only the reported field.
+    if pred.get("fee_status") == "unknown" and (fields.fee_status is None or fields.fee_status == "unknown"):
+        if (fields.visa_class or pred.get("visa_class")) == "DIP-1":
+            pred["fee_status"] = "waived"
+        else:
+            pred["fee_status"] = "paid"
     pred["_debug"] = {
         "reasons": decision.reasons,
         "posterior": decision.posterior,
