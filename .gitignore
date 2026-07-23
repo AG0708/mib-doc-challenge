@@ -9,6 +9,14 @@ tmp/
 output/
 .env
 
+# Node / Next.js (Relay demo)
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # Bulk challenge data is distributed as a versioned zip.
 data/train/
 data/validation/
