@@ -5,6 +5,7 @@ import { CRM_STAGES, TEAM } from "@/data/seed";
 import type { CrmStage } from "@/data/types";
 import { useOps } from "@/lib/ops-store";
 import { cn, formatCompact, formatUsd } from "@/lib/utils";
+import { formatRelative, dateOnly } from "@/lib/time";
 import {
   PageHeader,
   Badge,
@@ -153,7 +154,9 @@ export default function CrmPage() {
                     </td>
                     <td className="px-4 py-3 text-ink-soft">{c.manager}</td>
                     <td className="mono px-4 py-3">{formatCompact(c.views30d)}</td>
-                    <td className="mono px-4 py-3 text-muted">{c.joinedAt}</td>
+                    <td className="mono px-4 py-3 text-muted">
+                      {dateOnly(c.joinedAt)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -174,10 +177,22 @@ export default function CrmPage() {
                   {active.handle} · {active.city} ·{" "}
                   <PlatformDot platform={active.platform} />
                 </p>
+                <p className="mono mt-1 text-[11px] text-muted">
+                  {active.email} · {active.timezone}
+                </p>
               </div>
             </div>
 
-            <dl className="mt-5 grid grid-cols-2 gap-2 text-sm">
+            <a
+              href={active.deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 block truncate rounded-lg border border-line bg-white/70 px-3 py-2 text-xs text-signal-deep hover:bg-white"
+            >
+              {active.deepLink}
+            </a>
+
+            <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
               <div className="rounded-xl border border-line bg-white/60 p-3">
                 <dt className="text-muted">Standing</dt>
                 <dd className="mt-1 font-semibold capitalize">
@@ -195,9 +210,11 @@ export default function CrmPage() {
                 </dd>
               </div>
               <div className="rounded-xl border border-line bg-white/60 p-3">
-                <dt className="text-muted">Posts</dt>
+                <dt className="text-muted">Last post</dt>
                 <dd className="mono mt-1 font-semibold">
-                  {active.postsDone}/{active.postsDue}
+                  {active.lastPostAt
+                    ? formatRelative(active.lastPostAt)
+                    : "—"}
                 </dd>
               </div>
             </dl>
@@ -244,9 +261,9 @@ export default function CrmPage() {
 
             <div className="mt-5 rounded-xl border border-dashed border-signal/40 bg-signal/5 p-3 text-sm text-ink-soft">
               <p className="mono mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-signal-deep">
-                Webhook inbox
+                Webhook sync
               </p>
-              HMAC-verified onboarding steps land here. Full contract on Systems.
+              Onboarding steps land via HMAC-signed webhooks. Fire a live event from Systems.
             </div>
 
             <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted">

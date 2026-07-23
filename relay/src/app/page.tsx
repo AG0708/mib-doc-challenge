@@ -68,15 +68,15 @@ export default function PulsePage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
             <p className="mono text-[11px] font-medium uppercase tracking-[0.18em] text-muted">
-              Relay · Sherlock internal tools demo
+              Pulse · last sync {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
             </p>
             <h1 className="display mt-2 text-[2.75rem] leading-[0.92] text-ink md:text-6xl">
               Creator ops.
               <span className="block text-signal-deep">Tied to outcomes.</span>
             </h1>
             <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
-              A Beige-shaped command center: recruit, onboard, manage, and pay —
-              with every view attributed to installs, unique web visits, and revenue.
+              Recruit, onboard, manage, and pay — with every view attributed to
+              app installs, unique web visits, and revenue.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -102,7 +102,35 @@ export default function PulsePage() {
       </div>
 
       <LiveTicker />
-      <ConversionRibbon rates={conv} />
+      <ConversionRibbon
+        rates={conv}
+        steps={[
+          {
+            key: "views",
+            label: "Views",
+            value: formatCompact(viewsLive),
+            color: "#12c48b",
+          },
+          {
+            key: "installs",
+            label: "Installs",
+            value: formatCompact(installsLive),
+            color: "#ff4f24",
+          },
+          {
+            key: "web",
+            label: "Web visits",
+            value: formatCompact(webLive),
+            color: "#0b1220",
+          },
+          {
+            key: "rev",
+            label: "Revenue",
+            value: formatUsd(revLive),
+            color: "#efb014",
+          },
+        ]}
+      />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatBlock

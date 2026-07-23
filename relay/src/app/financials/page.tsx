@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { dailyMetrics } from "@/data/seed";
 import { useOps } from "@/lib/ops-store";
 import { formatCompact, formatUsd, cn } from "@/lib/utils";
+import { formatRelative } from "@/lib/time";
 import {
   PageHeader,
   SectionTitle,
@@ -131,6 +132,7 @@ export default function FinancialsPage() {
                 <th className="px-4 py-3 font-medium">Views</th>
                 <th className="px-4 py-3 font-medium">Amount</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Updated</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
@@ -150,6 +152,9 @@ export default function FinancialsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={STATUS_TONE[p.status]}>{p.status}</Badge>
+                  </td>
+                  <td className="mono px-4 py-3 text-muted">
+                    {formatRelative(p.updatedAt)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">

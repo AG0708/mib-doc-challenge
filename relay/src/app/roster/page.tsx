@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useOps } from "@/lib/ops-store";
 import { formatCompact, formatUsd, cn } from "@/lib/utils";
+import { formatRelative } from "@/lib/time";
 import type { Creator } from "@/data/types";
 import {
   PageHeader,
@@ -218,6 +219,21 @@ export default function RosterPage() {
                 <p className="text-sm text-muted">
                   {selected.handle} · next payout {formatUsd(selected.nextPayout)}
                 </p>
+                <p className="mono mt-1 text-[11px] text-muted">
+                  Last post{" "}
+                  {selected.lastPostAt
+                    ? formatRelative(selected.lastPostAt)
+                    : "—"}{" "}
+                  · {selected.timezone}
+                </p>
+                <a
+                  href={selected.deepLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 block truncate text-xs text-signal-deep"
+                >
+                  {selected.deepLink}
+                </a>
               </div>
               <Button size="sm" onClick={() => setSelected(null)}>
                 Close

@@ -5,7 +5,9 @@ import type {
   DailyMetric,
   PayoutRow,
   Prospect,
+  WebhookEvent,
 } from "./types";
+import { isoDaysAgo, isoHoursAgo, isoMinutesAgo } from "@/lib/time";
 
 export const TEAM = ["Ava", "Marcus", "Noor", "Jules"] as const;
 
@@ -19,9 +21,11 @@ export const prospects: Prospect[] = [
     niche: "true crime edits",
     stage: "call_booked",
     owner: "Ava",
-    lastTouch: "2026-07-22",
+    lastTouch: isoHoursAgo(5),
     notes: "Booked Thu 2pm ET. Wants weekly brief + product drops.",
     score: 92,
+    email: "mina@okonkwo.studio",
+    source: "TikTok Creative Center",
   },
   {
     id: "p2",
@@ -32,9 +36,11 @@ export const prospects: Prospect[] = [
     niche: "tech reveal",
     stage: "replied",
     owner: "Marcus",
-    lastTouch: "2026-07-21",
-    notes: "Asked about exclusivity. Send rate card.",
+    lastTouch: isoHoursAgo(18),
+    notes: "Asked about exclusivity. Rate card sent.",
     score: 81,
+    email: "theo@brandt.media",
+    source: "Inbound DM",
   },
   {
     id: "p3",
@@ -45,9 +51,11 @@ export const prospects: Prospect[] = [
     niche: "face-reveal POV",
     stage: "contacted",
     owner: "Noor",
-    lastTouch: "2026-07-20",
-    notes: "Opened DM, no reply yet. Nudge Friday.",
+    lastTouch: isoDaysAgo(2),
+    notes: "Opened DM, no reply. Nudge Friday.",
     score: 88,
+    email: "sable@quinn.co",
+    source: "Lookalike scrape",
   },
   {
     id: "p4",
@@ -58,9 +66,11 @@ export const prospects: Prospect[] = [
     niche: "OSINT explainers",
     stage: "sourced",
     owner: "Jules",
-    lastTouch: "2026-07-19",
+    lastTouch: isoDaysAgo(3),
     notes: "Strong overlap with Sherlock audience.",
     score: 74,
+    email: "devon@hale.yt",
+    source: "YouTube research",
   },
   {
     id: "p5",
@@ -71,9 +81,11 @@ export const prospects: Prospect[] = [
     niche: "dating lore",
     stage: "sourced",
     owner: "Ava",
-    lastTouch: "2026-07-18",
+    lastTouch: isoDaysAgo(4),
     notes: "Warm intro via Mina.",
     score: 79,
+    email: "priya@raman.tv",
+    source: "Referral",
   },
   {
     id: "p6",
@@ -84,9 +96,11 @@ export const prospects: Prospect[] = [
     niche: "street interviews",
     stage: "replied",
     owner: "Marcus",
-    lastTouch: "2026-07-22",
+    lastTouch: isoHoursAgo(3),
     notes: "Wants sample scripts before call.",
     score: 85,
+    email: "kai@ellison.co",
+    source: "IG discovery",
   },
   {
     id: "p7",
@@ -97,9 +111,11 @@ export const prospects: Prospect[] = [
     niche: "viral hooks",
     stage: "call_booked",
     owner: "Noor",
-    lastTouch: "2026-07-22",
+    lastTouch: isoMinutesAgo(40),
     notes: "Agency managed. Bring CFO rates.",
     score: 95,
+    email: "talent@voss-mgmt.com",
+    source: "Agency outbound",
   },
   {
     id: "p8",
@@ -110,9 +126,11 @@ export const prospects: Prospect[] = [
     niche: "privacy tools",
     stage: "no_show",
     owner: "Jules",
-    lastTouch: "2026-07-15",
+    lastTouch: isoDaysAgo(7),
     notes: "Missed first call. Reschedule offer sent.",
     score: 61,
+    email: "ellis@park.io",
+    source: "Newsletter mention",
   },
   {
     id: "p9",
@@ -123,9 +141,11 @@ export const prospects: Prospect[] = [
     niche: "aesthetic lore",
     stage: "closed_lost",
     owner: "Ava",
-    lastTouch: "2026-07-10",
+    lastTouch: isoDaysAgo(12),
     notes: "Locked with competitor for 90 days.",
     score: 70,
+    email: "rhea@cole.studio",
+    source: "TikTok Creative Center",
   },
   {
     id: "p10",
@@ -136,9 +156,11 @@ export const prospects: Prospect[] = [
     niche: "creator economy",
     stage: "contacted",
     owner: "Marcus",
-    lastTouch: "2026-07-21",
+    lastTouch: isoDaysAgo(1),
     notes: "Follow-up sequence day 2.",
     score: 77,
+    email: "jonah@reed.media",
+    source: "Inbound form",
   },
   {
     id: "p11",
@@ -149,9 +171,11 @@ export const prospects: Prospect[] = [
     niche: "face ID myths",
     stage: "sourced",
     owner: "Noor",
-    lastTouch: "2026-07-22",
+    lastTouch: isoHoursAgo(2),
     notes: "Perfect niche fit. Priority outreach.",
     score: 90,
+    email: "amira@sol.tv",
+    source: "Competitor comment scrape",
   },
   {
     id: "p12",
@@ -162,14 +186,44 @@ export const prospects: Prospect[] = [
     niche: "app reviews",
     stage: "replied",
     owner: "Jules",
-    lastTouch: "2026-07-22",
+    lastTouch: isoHoursAgo(6),
     notes: "Wants affiliate + flat fee hybrid.",
     score: 83,
+    email: "beck@tran.reviews",
+    source: "YouTube research",
+  },
+  {
+    id: "p13",
+    name: "Yara Mendes",
+    handle: "@yaram",
+    platform: "tiktok",
+    followers: 715000,
+    niche: "relationship tea",
+    stage: "sourced",
+    owner: "Ava",
+    lastTouch: isoHoursAgo(1),
+    notes: "High comment velocity on face-search content.",
+    score: 86,
+    email: "yara@mendes.co",
+    source: "Hashtag monitor",
   },
 ];
 
+function creator(
+  partial: Omit<Creator, "email" | "deepLink" | "timezone"> &
+    Partial<Pick<Creator, "email" | "deepLink" | "timezone">>,
+): Creator {
+  const slug = partial.handle.replace("@", "");
+  return {
+    email: partial.email ?? `${slug}@creators.relay`,
+    deepLink: partial.deepLink ?? `https://sherlocksearch.com/r/${slug}`,
+    timezone: partial.timezone ?? "America/New_York",
+    ...partial,
+  };
+}
+
 export const creators: Creator[] = [
-  {
+  creator({
     id: "c1",
     name: "Lila Chen",
     handle: "@lilachen",
@@ -185,12 +239,13 @@ export const creators: Creator[] = [
     postsDone: 11,
     nextPayout: 5400,
     rate: "$0.45 / 1k views",
-    joinedAt: "2026-02-12",
+    joinedAt: isoDaysAgo(160),
     manager: "Ava",
-    lastPostAt: "2026-07-22",
-    city: "LA",
-  },
-  {
+    lastPostAt: isoHoursAgo(8),
+    city: "Los Angeles",
+    timezone: "America/Los_Angeles",
+  }),
+  creator({
     id: "c2",
     name: "Omar Diallo",
     handle: "@omardi",
@@ -206,12 +261,12 @@ export const creators: Creator[] = [
     postsDone: 8,
     nextPayout: 2800,
     rate: "flat $2.8k / mo",
-    joinedAt: "2026-03-01",
+    joinedAt: isoDaysAgo(140),
     manager: "Marcus",
-    lastPostAt: "2026-07-21",
-    city: "NYC",
-  },
-  {
+    lastPostAt: isoDaysAgo(1),
+    city: "New York",
+  }),
+  creator({
     id: "c3",
     name: "Ivy Nakamura",
     handle: "@ivynak",
@@ -227,12 +282,13 @@ export const creators: Creator[] = [
     postsDone: 9,
     nextPayout: 4100,
     rate: "$0.45 / 1k views",
-    joinedAt: "2026-01-20",
+    joinedAt: isoDaysAgo(180),
     manager: "Noor",
-    lastPostAt: "2026-07-22",
+    lastPostAt: isoHoursAgo(11),
     city: "Tokyo",
-  },
-  {
+    timezone: "Asia/Tokyo",
+  }),
+  creator({
     id: "c4",
     name: "Cass Rivera",
     handle: "@cassr",
@@ -248,12 +304,13 @@ export const creators: Creator[] = [
     postsDone: 2,
     nextPayout: 1600,
     rate: "flat $1.6k / mo",
-    joinedAt: "2026-04-08",
+    joinedAt: isoDaysAgo(100),
     manager: "Jules",
-    lastPostAt: "2026-07-14",
+    lastPostAt: isoDaysAgo(8),
     city: "Austin",
-  },
-  {
+    timezone: "America/Chicago",
+  }),
+  creator({
     id: "c5",
     name: "Nia Brooks",
     handle: "@niabrooks",
@@ -269,12 +326,12 @@ export const creators: Creator[] = [
     postsDone: 1,
     nextPayout: 450,
     rate: "$0.40 / 1k views",
-    joinedAt: "2026-07-01",
+    joinedAt: isoDaysAgo(20),
     manager: "Ava",
-    lastPostAt: "2026-07-20",
+    lastPostAt: isoDaysAgo(2),
     city: "Atlanta",
-  },
-  {
+  }),
+  creator({
     id: "c6",
     name: "Felix Orth",
     handle: "@felixorth",
@@ -290,12 +347,13 @@ export const creators: Creator[] = [
     postsDone: 0,
     nextPayout: 0,
     rate: "TBD",
-    joinedAt: "2026-07-18",
+    joinedAt: isoDaysAgo(4),
     manager: "Marcus",
-    lastPostAt: "—",
+    lastPostAt: "",
     city: "Berlin",
-  },
-  {
+    timezone: "Europe/Berlin",
+  }),
+  creator({
     id: "c7",
     name: "Tessa Vale",
     handle: "@tessavale",
@@ -311,12 +369,13 @@ export const creators: Creator[] = [
     postsDone: 14,
     nextPayout: 6900,
     rate: "$0.50 / 1k views",
-    joinedAt: "2025-12-02",
+    joinedAt: isoDaysAgo(220),
     manager: "Noor",
-    lastPostAt: "2026-07-22",
+    lastPostAt: isoHoursAgo(3),
     city: "London",
-  },
-  {
+    timezone: "Europe/London",
+  }),
+  creator({
     id: "c8",
     name: "Hugo Martins",
     handle: "@hugom",
@@ -332,12 +391,13 @@ export const creators: Creator[] = [
     postsDone: 1,
     nextPayout: 0,
     rate: "hold",
-    joinedAt: "2026-03-22",
+    joinedAt: isoDaysAgo(120),
     manager: "Jules",
-    lastPostAt: "2026-06-30",
+    lastPostAt: isoDaysAgo(22),
     city: "Lisbon",
-  },
-  {
+    timezone: "Europe/Lisbon",
+  }),
+  creator({
     id: "c9",
     name: "Aya Hassan",
     handle: "@ayahsn",
@@ -353,12 +413,13 @@ export const creators: Creator[] = [
     postsDone: 0,
     nextPayout: 0,
     rate: "pending",
-    joinedAt: "2026-07-21",
+    joinedAt: isoDaysAgo(1),
     manager: "Ava",
-    lastPostAt: "—",
+    lastPostAt: "",
     city: "Dubai",
-  },
-  {
+    timezone: "Asia/Dubai",
+  }),
+  creator({
     id: "c10",
     name: "Rex Colton",
     handle: "@rexcolton",
@@ -374,12 +435,13 @@ export const creators: Creator[] = [
     postsDone: 4,
     nextPayout: 2200,
     rate: "flat $2.2k / mo",
-    joinedAt: "2026-02-28",
+    joinedAt: isoDaysAgo(145),
     manager: "Marcus",
-    lastPostAt: "2026-07-19",
+    lastPostAt: isoDaysAgo(3),
     city: "Chicago",
-  },
-  {
+    timezone: "America/Chicago",
+  }),
+  creator({
     id: "c11",
     name: "Suki Ahn",
     handle: "@sukiahn",
@@ -395,12 +457,13 @@ export const creators: Creator[] = [
     postsDone: 12,
     nextPayout: 5100,
     rate: "$0.45 / 1k views",
-    joinedAt: "2026-01-08",
+    joinedAt: isoDaysAgo(195),
     manager: "Noor",
-    lastPostAt: "2026-07-22",
+    lastPostAt: isoHoursAgo(6),
     city: "Seoul",
-  },
-  {
+    timezone: "Asia/Seoul",
+  }),
+  creator({
     id: "c12",
     name: "Miles Quinn",
     handle: "@milesq",
@@ -416,21 +479,45 @@ export const creators: Creator[] = [
     postsDone: 0,
     nextPayout: 0,
     rate: "ended",
-    joinedAt: "2025-11-14",
+    joinedAt: isoDaysAgo(250),
     manager: "Jules",
-    lastPostAt: "2026-05-02",
+    lastPostAt: isoDaysAgo(80),
     city: "Denver",
-  },
+    timezone: "America/Denver",
+  }),
+  creator({
+    id: "c13",
+    name: "Zoe Park",
+    handle: "@zoepark",
+    platform: "tiktok",
+    stage: "live",
+    standing: "strong",
+    cpm: 3.4,
+    views30d: 5400000,
+    installs30d: 6400,
+    webVisits30d: 3900,
+    revenue30d: 15200,
+    postsDue: 10,
+    postsDone: 9,
+    nextPayout: 2400,
+    rate: "$0.42 / 1k views",
+    joinedAt: isoDaysAgo(70),
+    manager: "Ava",
+    lastPostAt: isoHoursAgo(14),
+    city: "Toronto",
+    timezone: "America/Toronto",
+  }),
 ];
 
 function daysBack(n: number): DailyMetric[] {
   const out: DailyMetric[] = [];
-  const base = new Date("2026-07-22T12:00:00Z");
+  const base = new Date();
+  base.setHours(12, 0, 0, 0);
   for (let i = n - 1; i >= 0; i--) {
     const d = new Date(base);
-    d.setUTCDate(base.getUTCDate() - i);
+    d.setDate(base.getDate() - i);
     const wave = Math.sin(i / 3.2) * 0.18 + 1;
-    const weekend = d.getUTCDay() === 0 || d.getUTCDay() === 6 ? 1.22 : 1;
+    const weekend = d.getDay() === 0 || d.getDay() === 6 ? 1.22 : 1;
     const views = Math.round((2100000 + i * 18000) * wave * weekend);
     const installs = Math.round(views * 0.00145 * (0.92 + (i % 5) * 0.02));
     const webVisits = Math.round(views * 0.00082 * (0.9 + (i % 7) * 0.015));
@@ -453,25 +540,25 @@ export const competitorPulse: CompetitorPulse[] = [
     name: "Lookalike Labs",
     shareOfVoice: 28,
     weekDelta: 3.2,
-    topHook: "\"I reverse-searched my date\"",
+    topHook: '"I reverse-searched my date"',
   },
   {
     name: "FaceMap",
     shareOfVoice: 21,
     weekDelta: -1.4,
-    topHook: "\"Your photos are public\"",
+    topHook: '"Your photos are public"',
   },
   {
     name: "Sherlock",
     shareOfVoice: 34,
     weekDelta: 5.8,
-    topHook: "\"One photo. Full footprint.\"",
+    topHook: '"One photo. Full footprint."',
   },
   {
     name: "Tracely",
     shareOfVoice: 17,
     weekDelta: -0.6,
-    topHook: "\"Find anyone from a selfie\"",
+    topHook: '"Find anyone from a selfie"',
   },
 ];
 
@@ -484,6 +571,7 @@ export const payouts: PayoutRow[] = [
     views: 7800000,
     amount: 3900,
     status: "paid",
+    updatedAt: isoDaysAgo(2),
   },
   {
     id: "pay2",
@@ -493,6 +581,7 @@ export const payouts: PayoutRow[] = [
     views: 6400000,
     amount: 2880,
     status: "paid",
+    updatedAt: isoDaysAgo(2),
   },
   {
     id: "pay3",
@@ -502,6 +591,7 @@ export const payouts: PayoutRow[] = [
     views: 5600000,
     amount: 2520,
     status: "processing",
+    updatedAt: isoHoursAgo(9),
   },
   {
     id: "pay4",
@@ -511,6 +601,7 @@ export const payouts: PayoutRow[] = [
     views: 4500000,
     amount: 2025,
     status: "queued",
+    updatedAt: isoHoursAgo(20),
   },
   {
     id: "pay5",
@@ -520,6 +611,7 @@ export const payouts: PayoutRow[] = [
     views: 6200000,
     amount: 2800,
     status: "queued",
+    updatedAt: isoHoursAgo(16),
   },
   {
     id: "pay6",
@@ -529,6 +621,7 @@ export const payouts: PayoutRow[] = [
     views: 4800000,
     amount: 2200,
     status: "queued",
+    updatedAt: isoHoursAgo(16),
   },
   {
     id: "pay7",
@@ -538,6 +631,7 @@ export const payouts: PayoutRow[] = [
     views: 2100000,
     amount: 1600,
     status: "hold",
+    updatedAt: isoDaysAgo(1),
   },
   {
     id: "pay8",
@@ -547,51 +641,112 @@ export const payouts: PayoutRow[] = [
     views: 420000,
     amount: 168,
     status: "queued",
+    updatedAt: isoHoursAgo(12),
+  },
+  {
+    id: "pay9",
+    creatorId: "c13",
+    creatorName: "Zoe Park",
+    period: "Jul 1–15",
+    views: 2700000,
+    amount: 1134,
+    status: "queued",
+    updatedAt: isoHoursAgo(10),
   },
 ];
 
 export const activity: ActivityItem[] = [
   {
     id: "a1",
-    at: "2026-07-22T21:14:00Z",
+    at: isoMinutesAgo(18),
     kind: "content",
     title: "Tessa Vale hit 2.1M views",
-    detail: "Hook variant B outperformed A by 38% — auto-flagged for playbook.",
+    detail: "Hook variant B outperformed A by 38% — flagged for playbook.",
   },
   {
     id: "a2",
-    at: "2026-07-22T19:02:00Z",
+    at: isoHoursAgo(2),
     kind: "outreach",
     title: "Nora Voss call booked",
     detail: "Thu 4:30pm ET · Noor owning · agency on the line.",
   },
   {
     id: "a3",
-    at: "2026-07-22T17:40:00Z",
+    at: isoHoursAgo(4),
     kind: "finance",
     title: "Payroll batch #184 queued",
     detail: "$14,293 across 6 creators · Stripe Connect draft ready.",
   },
   {
     id: "a4",
-    at: "2026-07-22T16:11:00Z",
+    at: isoHoursAgo(6),
     kind: "alert",
     title: "Cass Rivera under-posting",
     detail: "2/4 posts done · standing moved to watch · Jules notified.",
   },
   {
     id: "a5",
-    at: "2026-07-22T14:28:00Z",
+    at: isoHoursAgo(9),
     kind: "crm",
     title: "Felix Orth entered onboarding",
-    detail: "Web flow step 2 complete · HMAC webhook synced to Relay.",
+    detail: "Web flow step 2 complete · HMAC webhook applied.",
   },
   {
     id: "a6",
-    at: "2026-07-22T12:05:00Z",
+    at: isoHoursAgo(11),
     kind: "content",
     title: "Competitor hook spike",
-    detail: "Lookalike Labs +3.2 SoV this week on \"date reverse-search\" angle.",
+    detail: "Lookalike Labs +3.2 SoV this week on date reverse-search angle.",
+  },
+];
+
+export const seedWebhooks: WebhookEvent[] = [
+  {
+    id: "wh1",
+    at: isoHoursAgo(9),
+    source: "web_onboarding",
+    event: "step.completed",
+    creatorId: "c6",
+    step: "payment_connected",
+    signatureValid: true,
+    status: "applied",
+    idempotencyKey: "ob_c6_pay_01",
+    raw: '{"event":"step.completed","creator_id":"c6","step":"payment_connected"}',
+  },
+  {
+    id: "wh2",
+    at: isoDaysAgo(1),
+    source: "web_onboarding",
+    event: "step.completed",
+    creatorId: "c9",
+    step: "account_created",
+    signatureValid: true,
+    status: "applied",
+    idempotencyKey: "ob_c9_acct_01",
+    raw: '{"event":"step.completed","creator_id":"c9","step":"account_created"}',
+  },
+  {
+    id: "wh3",
+    at: isoDaysAgo(2),
+    source: "slack_bot",
+    event: "alert.cadence",
+    creatorId: "c4",
+    signatureValid: true,
+    status: "applied",
+    idempotencyKey: "slack_c4_cadence_02",
+    raw: '{"event":"alert.cadence","creator_id":"c4"}',
+  },
+  {
+    id: "wh4",
+    at: isoDaysAgo(3),
+    source: "web_onboarding",
+    event: "step.completed",
+    creatorId: "c5",
+    step: "guidelines_accepted",
+    signatureValid: false,
+    status: "rejected",
+    idempotencyKey: "ob_c5_guide_bad",
+    raw: '{"event":"step.completed","creator_id":"c5","step":"guidelines_accepted"}',
   },
 ];
 
@@ -612,3 +767,11 @@ export const CRM_STAGES = [
   { id: "paused", label: "Paused" },
   { id: "churned", label: "Churned" },
 ] as const;
+
+export const STEP_TO_STAGE: Record<string, Creator["stage"]> = {
+  account_created: "signed",
+  payment_connected: "onboarding",
+  guidelines_accepted: "onboarding",
+  first_post_published: "first_post",
+  go_live: "live",
+};

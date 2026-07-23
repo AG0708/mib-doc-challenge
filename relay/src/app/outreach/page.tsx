@@ -7,6 +7,7 @@ import { OUTREACH_STAGES, TEAM } from "@/data/seed";
 import type { OutreachStage, Platform, Prospect } from "@/data/types";
 import { useOps } from "@/lib/ops-store";
 import { formatFollowers, cn } from "@/lib/utils";
+import { formatRelative } from "@/lib/time";
 import {
   PageHeader,
   Badge,
@@ -245,7 +246,9 @@ export default function OutreachPage() {
                 <Meta label="Score" value={String(selected.score)} />
                 <Meta label="Followers" value={formatFollowers(selected.followers)} />
                 <Meta label="Platform" value={<PlatformDot platform={selected.platform} />} />
-                <Meta label="Last touch" value={selected.lastTouch} />
+                <Meta label="Last touch" value={formatRelative(selected.lastTouch)} />
+                <Meta label="Source" value={selected.source ?? "—"} />
+                <Meta label="Email" value={selected.email ?? "—"} />
               </div>
               <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.12em] text-muted">
                 Notes

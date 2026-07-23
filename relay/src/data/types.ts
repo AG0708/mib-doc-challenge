@@ -27,9 +27,11 @@ export interface Prospect {
   niche: string;
   stage: OutreachStage;
   owner: string;
-  lastTouch: string;
+  lastTouch: string; // ISO
   notes: string;
   score: number;
+  email?: string;
+  source?: string;
 }
 
 export interface Creator {
@@ -48,10 +50,13 @@ export interface Creator {
   postsDone: number;
   nextPayout: number;
   rate: string;
-  joinedAt: string;
+  joinedAt: string; // ISO date
   manager: string;
-  lastPostAt: string;
+  lastPostAt: string; // ISO or empty
   city: string;
+  email: string;
+  deepLink: string;
+  timezone: string;
 }
 
 export interface ActivityItem {
@@ -85,4 +90,27 @@ export interface PayoutRow {
   views: number;
   amount: number;
   status: "queued" | "processing" | "paid" | "hold";
+  updatedAt: string;
 }
+
+export interface WebhookEvent {
+  id: string;
+  at: string;
+  source: "web_onboarding" | "slack_bot" | "manual";
+  event: string;
+  creatorId: string;
+  step?: string;
+  signatureValid: boolean;
+  status: "applied" | "rejected" | "duplicate";
+  idempotencyKey: string;
+  raw: string;
+}
+
+export const CURRENT_USER = {
+  name: "Ava Chen",
+  email: "ava@relay.internal",
+  role: "Creator Ops",
+  team: "Growth",
+} as const;
+
+export const WEBHOOK_SECRET = "relay_dev_secret";

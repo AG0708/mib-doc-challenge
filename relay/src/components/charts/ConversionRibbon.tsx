@@ -2,18 +2,14 @@
 
 import { motion } from "framer-motion";
 
-const STEPS = [
-  { key: "views", label: "Views", value: "77.8M", color: "#12c48b" },
-  { key: "installs", label: "Installs", value: "108k", color: "#ff4f24" },
-  { key: "web", label: "Web visits", value: "60.2k", color: "#0b1220" },
-  { key: "rev", label: "Revenue", value: "$258k", color: "#efb014" },
-];
-
 export function ConversionRibbon({
   rates,
+  steps,
 }: {
   rates: { viewToInstall: number; viewToWeb: number; revPerInstall: number };
+  steps: { key: string; label: string; value: string; color: string }[];
 }) {
+  const STEPS = steps;
   return (
     <div className="panel grain mb-5 overflow-hidden rounded-2xl p-4 md:p-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">

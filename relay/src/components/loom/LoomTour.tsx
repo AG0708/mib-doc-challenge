@@ -20,7 +20,8 @@ const BEAT_MS = 12000;
 export function LoomTour() {
   const pathname = usePathname();
   const router = useRouter();
-  const [open, setOpen] = useState(true);
+  // Closed by default so the product feels real; open for recording.
+  const [open, setOpen] = useState(false);
   const [beatIndex, setBeatIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const playingRef = useRef(false);
