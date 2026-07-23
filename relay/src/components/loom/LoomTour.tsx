@@ -11,16 +11,16 @@ const STORAGE_KEY = "relay-loom-tour";
 
 export function LoomTour() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  // Default open so the Loom teleprompter is visible on first paint / recording.
+  const [open, setOpen] = useState(true);
   const [beatIndex, setBeatIndex] = useState(0);
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === null) setOpen(true);
-      else setOpen(stored === "1");
+      if (stored !== null) setOpen(stored === "1");
     } catch {
-      setOpen(true);
+      /* keep default open */
     }
   }, []);
 
