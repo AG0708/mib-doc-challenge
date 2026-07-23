@@ -21,12 +21,14 @@ def predict_pdf(path: Path | str, *, ocr_dpi: int = 150) -> dict[str, Any]:
     # Extraction fill: when fee was *never recovered* (None), impute majority
     # class for DIP-1 (waived) / others (paid). Do NOT overwrite an explicit
     # receipt "unknown" — those are labeled unknown and force NEEDS_REVIEW.
-    # Adjudication already ran on missing fee as `unknown`.
+    # Adjudication already ran; rules may have safely imputed DIP-1 fee when
+    # B-13 deny-flag evidence was present (fee_imputed_safe). Do NOT
+    # re-adjudicate after this fill: fee-only unlock without deny-flag
+    # recovery raises catastrophic FA (DENIED→APPROVED) on train.
     if pred.get("fee_status") == "unknown" and fields.fee_status is None:
-        if (fields.visa_class or pred.get("visa_class")) == "DIP-1":
-            pred["fee_status"] = "waived"
-        else:
-            pred["fee_status"] = "paid"
+        # Train majority for DIP-1 is paid (136) not waived (70). Impute paid
+        # for all visas when fee was never recovered. Does not re-adjudicate.
+        pred["fee_status"] = "paid"
     pred["_debug"] = {
         "reasons": decision.reasons,
         "posterior": decision.posterior,

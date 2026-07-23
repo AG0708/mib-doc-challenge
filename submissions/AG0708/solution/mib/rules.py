@@ -12,6 +12,7 @@ from typing import Any
 from .constants import (
     DEFAULT_RECEIPT_DATE,
     DENY_FLAGS,
+    EMBARGO_WORLDS,
     RESTRICTED_WORLDS,
     REVIEW_FLAGS,
     REVOKED_SPONSORS,
@@ -53,7 +54,11 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
     reasons: list[str] = []
     flags = _flag_set(fields.risk_flags)
     visa = fields.visa_class or "unknown"
-    fee = fields.fee_status or "unknown"
+    # Distinguish explicit receipt "unknown" from missing fee (None). Both are
+    # REVIEW under FIELD_MANUAL, but None may later be filled for extraction
+    # scoring only — never invent paid/waived here (fee-only unlock ↑ FA).
+    fee_missing = fields.fee_status is None
+    fee = fields.fee_status if fields.fee_status is not None else "unknown"
     sponsor = fields.sponsor_id or ""
     home = fields.home_world or ""
     arrival = _parse_date(fields.arrival_date)
@@ -73,7 +78,20 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
     uncertainty = 0.0
     if fields.used_ocr:
         uncertainty += 0.05
-    if fields.conflicts:
+    decision_conflicts = [
+        c
+        for c in (fields.conflicts or [])
+        if c.split(":", 1)[0]
+        in {
+            "fee_status",
+            "risk_flags",
+            "visa_class",
+            "sponsor_id",
+            "home_world",
+            "arrival_date",
+        }
+    ]
+    if decision_conflicts:
         uncertainty += 0.15
     if fields.fee_obscured:
         uncertainty += 0.1
@@ -113,6 +131,12 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
         deny = True
         deny_reasons.append(f"restricted_world={home}")
 
+    # Train-inferred: Eris Relay / TRAPPIST-1e always DENY (all visas; flag often
+    # missing from PDF while home_world is intact).
+    if home in EMBARGO_WORLDS:
+        deny = True
+        deny_reasons.append(f"embargo_world={home}")
+
     # FIELD_MANUAL: stale if arrival > 180d before receipt; DIP-1 + diplomatic note exception
     if visa != "DIP-1" and arrival is not None:
         age = (receipt - arrival).days
@@ -127,10 +151,57 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
         p_a = max(0.01, 1.0 - p_d - p_r)
         return {"APPROVED": p_a, "DENIED": p_d, "NEEDS_REVIEW": p_r}, reasons
 
-    # --- Terminal REVIEW: fee unknown (FIELD_MANUAL fee rules) ---
+    # --- Terminal REVIEW: fee unknown / missing (FIELD_MANUAL fee rules) ---
+    # Explicit receipt "unknown" → always REVIEW (do not impute).
+    # Missing fee (None) is usually REVIEW, but train A→R residuals allow a
+    # gated unlock when the B-13 deny-flag channel was observed (bio in
+    # sources) as none, intake anchors visa/arrival, and the packet is
+    # otherwise clean. Impute waived for DIP-1 and continue.
+    #
+    # XW-*/MED-3 excluded: XW-1 latent unpaid without a fee page is
+    # indistinguishable from paid A→R (FA 107/332 → FA 25→27); XW-2 EV favors
+    # DENY; MED-3 hits truth-unknown REVIEW + unpaid. Bare pipeline fill
+    # without bio evidence still ↑ FA — never re-adjudicate fill alone.
     if fee == "unknown":
-        reasons.append("fee_unknown->REVIEW")  # FIELD_MANUAL: unknown → needs review
-        return {"APPROVED": 0.02, "DENIED": 0.02, "NEEDS_REVIEW": 0.96}, reasons
+        sources = fields.sources or {}
+        bio_ok = "risk_flags" in sources
+        src_arr = sources.get("arrival_date", "")
+        src_visa = sources.get("visa_class", "")
+        intake_anchored = src_arr.startswith("intake") or src_visa.startswith(
+            ("intake", "correction")
+        )
+        # name_cut_out alone must not block impute: extraction defect only.
+        ev_blocks = fields.evidence_needs_review
+        if (
+            ev_blocks
+            and fields.name_cut_out
+            and not fields.applicant_name
+            and bio_ok
+            and arrival is not None
+            and not fields.arrival_unreadable
+            and not fields.fee_obscured
+            and not (flags & (DENY_FLAGS | REVIEW_FLAGS))
+        ):
+            ev_blocks = False
+        safe_impute = (
+            fee_missing
+            and bio_ok
+            and visa == "DIP-1"
+            and intake_anchored
+            and not ev_blocks
+            and not fields.arrival_unreadable
+            and arrival is not None
+            and fields.note_finding not in {"DENIED", "NEEDS_REVIEW"}
+            and not (flags & (DENY_FLAGS | REVIEW_FLAGS))
+        )
+        if safe_impute:
+            fee = "waived"
+            fee_missing = False
+            reasons.append("fee_imputed_safe->waived")
+            # Fall through into deny/review/approve with imputed fee.
+        else:
+            reasons.append("fee_unknown->REVIEW" if not fee_missing else "fee_missing->REVIEW")
+            return {"APPROVED": 0.02, "DENIED": 0.02, "NEEDS_REVIEW": 0.96}, reasons
 
     # --- Arrival missing / only unreadable (FIELD_MANUAL date rules) ---
     if fields.arrival_unreadable or arrival is None:
@@ -149,8 +220,10 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
         review = True
         reasons.append("evidence_needs_review")
 
-    # Missing critical fields for non-DIP
-    if visa != "DIP-1" and not sponsor:
+    # Missing critical fields for non-DIP.
+    # Keep SPN-0000 / empty as REVIEW: protects revoked-sponsor misses
+    # (e.g. truth SPN-2718 with pred SPN-0000 would otherwise false-approve).
+    if visa != "DIP-1" and (not sponsor or sponsor == "SPN-0000"):
         review = True
         reasons.append("missing_sponsor")
 
@@ -167,6 +240,8 @@ def compute_posteriors(fields: ExtractedFields, receipt_date: date | None = None
     reasons.append("clean_approve")
     # Only treat biometric flags as missing when we never observed a B-13 /
     # Observed-flags line. used_ocr alone is not enough (registry OCR is common).
+    # If sources already record risk_flags (including confirmed "none"), do not
+    # apply the missing-bio penalty — that over-REVIEWed clean APPROVED packets.
     missing_bio = fields.used_ocr and "risk_flags" not in fields.sources
     if missing_bio:
         p_a = max(0.55, 0.78 - uncertainty * 0.5)

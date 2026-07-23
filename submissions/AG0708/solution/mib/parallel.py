@@ -41,14 +41,25 @@ def predict_dir_parallel(
     input_dir: Path | str,
     output_path: Path | str,
     *,
-    ocr_dpi: int = 140,
+    ocr_dpi: int | None = None,
     workers: int | None = None,
 ) -> int:
     input_dir = Path(input_dir)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pdfs = sorted(str(p) for p in input_dir.glob("*.pdf"))
-    workers = workers or max(1, min(int(os.environ.get("MIB_WORKERS", "0") or "0") or (os.cpu_count() or 2), 4))
+    # Default 2 workers: each PDF can spawn RapidOCR + tesseract; 4 workers
+    # previously produced load averages >150 on 4-CPU VMs.
+    default_workers = min(2, os.cpu_count() or 2)
+    workers = workers or max(
+        1,
+        min(int(os.environ.get("MIB_WORKERS", "0") or "0") or default_workers, 4),
+    )
+    if ocr_dpi is None:
+        try:
+            ocr_dpi = int(os.environ.get("MIB_OCR_DPI", "120") or "120")
+        except ValueError:
+            ocr_dpi = 120
 
     results: dict[str, dict[str, Any]] = {}
     with ProcessPoolExecutor(max_workers=workers) as ex:

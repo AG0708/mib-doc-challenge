@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
+import tempfile
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,8 +71,10 @@ USEFUL_MARKERS = (
     "Planetary Registry Extract",
     "FORM B-13",
     "FORMB-13",
+    "FORM B-12",  # OCR often reads B-13 as B-12
     "Sponsor Attestation",
     "Manual Adjudicator Note",
+    "Adjudicator Note",
     "Case ID",
     "CaseID",
     "Fee Status",
@@ -78,6 +84,14 @@ USEFUL_MARKERS = (
     "Manual correction",
     "Registry Name",
     "RegistryName",
+)
+
+# Loose keep-pattern for embedded-image OCR that RapidOCR mangles heavily.
+_OCR_KEEP_RE = re.compile(
+    r"MIB-\d{6}|SPN-?\d{4}|Observed|Fee|paid|waiv|flag|Finding|DENIED|APPROVED|"
+    r"FORM\s*B-?\d{1,2}|Biomot|Biometric|Blometric|Adjudicat|Scan\s*Slip|Sean\s*a|"
+    r"B-1[123]|embargo|biohazard|warrant|tamper",
+    re.I,
 )
 
 _OCR_ENGINE = None
@@ -99,9 +113,19 @@ def classify_page(text: str) -> str:
     for marker, name in PAGE_TYPE_MARKERS:
         if marker in text:
             return name
-    if re.search(r"Manual\s*Adjudicator\s*Note|Finding\s*:?\s*(APPROVED|DENIED|NEEDS_REVIEW)", text, re.I):
+    if re.search(
+        r"Manual\s*Adjudicator|Adjudicator\s*Note|"
+        r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)",
+        text,
+        re.I,
+    ):
         return "note"
-    if re.search(r"FORM\s*[B8]-?13|Observed\s*flags|Blometric\s*Scan", text, re.I):
+    if re.search(
+        r"FORM\s*[B8]-?\d{1,2}|Observed\s*flags|Blometric\s*Scan|Biomot\w*\s*Sean|"
+        r"Biometric\s*Scan",
+        text,
+        re.I,
+    ):
         return "biometric"
     # OCR typos: Recelpt/Racelpt/Rereint/Rocoipt, Fee Stius/Stus
     if re.search(
@@ -130,10 +154,96 @@ def _resize_np(img: np.ndarray, max_width: int = 1200) -> np.ndarray:
     return cv2.resize(img, (max_width, nh))
 
 
-def _ocr_tesseract(img: np.ndarray, *, upscale: bool = True) -> str:
-    """Tesseract OCR — better than RapidOCR on thin B-13 flag lines."""
-    import pytesseract
-    from PIL import ImageOps, ImageEnhance
+def _tess_timeout_s() -> float:
+    try:
+        return max(3.0, float(os.environ.get("MIB_TESS_TIMEOUT", "15")))
+    except ValueError:
+        return 15.0
+
+
+def _tess_slots() -> int:
+    try:
+        return max(1, int(os.environ.get("MIB_TESS_SLOTS", "2")))
+    except ValueError:
+        return 2
+
+
+@contextmanager
+def _tess_slot():
+    """Cross-process cap so workers cannot spawn dozens of hung tesseracts.
+
+    Uses one flock file per slot (MIB_TESS_SLOTS, default 2). If no slot frees
+    before the deadline, yield False so the caller skips tess instead of queueing.
+    """
+    import fcntl
+
+    slots = _tess_slots()
+    deadline = time.monotonic() + max(20.0, _tess_timeout_s() * 2)
+    fh = None
+    got = False
+    while time.monotonic() < deadline:
+        for i in range(slots):
+            path = Path(tempfile.gettempdir()) / f"mib-tess-slot-{i}.lock"
+            candidate = open(path, "a+", encoding="utf-8")
+            try:
+                fcntl.flock(candidate.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fh = candidate
+                got = True
+                break
+            except BlockingIOError:
+                candidate.close()
+        if got:
+            break
+        time.sleep(0.05)
+    try:
+        yield got
+    finally:
+        if fh is not None:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+            fh.close()
+
+
+def _run_tesseract_png(png_path: str, *, psm: int, timeout: float) -> str:
+    """Run tesseract CLI with a hard timeout; kill the process group on expiry."""
+    cmd = [
+        "tesseract",
+        png_path,
+        "stdout",
+        "--oem",
+        "1",
+        "--psm",
+        str(psm),
+        "-c",
+        "tessedit_do_invert=0",
+    ]
+    try:
+        # subprocess.run kills the child on timeout (Python 3.3+).
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+            env={**os.environ, "OMP_THREAD_LIMIT": os.environ.get("OMP_THREAD_LIMIT", "1")},
+        )
+    except subprocess.TimeoutExpired:
+        return ""
+    except FileNotFoundError:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return (proc.stdout or b"").decode("utf-8", errors="ignore")
+
+
+def _ocr_tesseract(img: np.ndarray, *, upscale: bool = True, psm: int = 6) -> str:
+    """Tesseract OCR — better than RapidOCR on thin B-13 flag lines.
+
+    Uses subprocess timeouts + a global slot lock. Without this, ProcessPool
+    workers can leave dozens of hung tesseracts (load average 100+ on 4 CPUs).
+    """
+    from PIL import ImageEnhance, ImageOps
 
     pil = Image.fromarray(img)
     if pil.width > 1600:
@@ -141,14 +251,78 @@ def _ocr_tesseract(img: np.ndarray, *, upscale: bool = True) -> str:
     if upscale and pil.width < 1400:
         pil = pil.resize((pil.width * 2, pil.height * 2), Image.LANCZOS)
     gray = ImageOps.grayscale(pil)
-    text = pytesseract.image_to_string(gray, config="--oem 1 --psm 6")
-    if not re.search(r"Fee\s*Status|Observed|FORM|Case|Finding|flag", text, re.I):
-        enh = ImageEnhance.Contrast(gray).enhance(2.0)
-        bw = enh.point(lambda x: 255 if x > 160 else 0)
-        alt = pytesseract.image_to_string(bw, config="--oem 1 --psm 6")
-        if len(alt) > len(text):
-            text = alt
-    return text
+    timeout = _tess_timeout_s()
+    fast = os.environ.get("MIB_TESS_FAST", "").strip() in {"1", "true", "yes"}
+
+    with _tess_slot() as got_slot:
+        if not got_slot:
+            return ""
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            png_path = tmp.name
+            gray.save(png_path, format="PNG")
+        try:
+            text = _run_tesseract_png(png_path, psm=psm, timeout=timeout)
+            # Second BW pass only when the gray pass missed form markers.
+            if (
+                not fast
+                and text
+                and not re.search(
+                    r"Fee\s*Status|Observed|FORM|Case|Finding|flag|DIP-WAIVER|\$809",
+                    text,
+                    re.I,
+                )
+            ):
+                enh = ImageEnhance.Contrast(gray).enhance(2.0)
+                bw = enh.point(lambda x: 255 if x > 160 else 0)
+                bw.save(png_path, format="PNG")
+                alt = _run_tesseract_png(png_path, psm=psm, timeout=timeout)
+                if len(alt) > len(text):
+                    text = alt
+            elif not fast and not text:
+                enh = ImageEnhance.Contrast(gray).enhance(2.0)
+                bw = enh.point(lambda x: 255 if x > 160 else 0)
+                bw.save(png_path, format="PNG")
+                text = _run_tesseract_png(png_path, psm=psm, timeout=timeout)
+        finally:
+            try:
+                os.unlink(png_path)
+            except OSError:
+                pass
+    return text or ""
+
+
+_FEE_HEADER_RE = re.compile(
+    r"MIB\s*Fe[eo]?\s*R[aeo]c[aeoi]?[il]?pt|"
+    r"Fee\s*Status|Waiver\s*Code|Amount\b|"
+    r"\[FEE STATUS OBSCURED\]|DIP-WAIVER|"
+    r"\b(?:unpaid|paid|waived|unknown)\b",
+    re.I,
+)
+
+
+def _ocr_fee_header(img: np.ndarray) -> str:
+    """Dedicated OCR for the receipt header block.
+
+    Many fee pages are nearly blank except for the top-left 4-row header. A
+    full-page OCR pass often returns sparse garbage and misses the visible fee
+    token, after which the pipeline majority-fills paid/waived. Re-OCRing the
+    small header crop is cheap and recovers explicit paid/unpaid/waived text.
+    """
+    h, w = img.shape[:2]
+    if h < 350 or w < 350:
+        return ""
+    crop = img[: max(260, int(h * 0.24)), : max(420, int(w * 0.58))]
+    if cv2 is not None:
+        crop = cv2.resize(crop, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
+    psms = (6,) if os.environ.get("MIB_TESS_FAST", "").strip() in {"1", "true", "yes"} else (6, 11)
+    for psm in psms:
+        try:
+            text = _normalize_ocr_spacing(_ocr_tesseract(crop, upscale=False, psm=psm))
+        except Exception:
+            continue
+        if _FEE_HEADER_RE.search(text or ""):
+            return text
+    return ""
 
 
 def _ocr_numpy(img: np.ndarray) -> str:
@@ -164,8 +338,9 @@ def _ocr_numpy(img: np.ndarray) -> str:
         # RapidOCR often drops spaces; insert newlines between lines.
         rapid = "\n".join(line[1] for line in result)
 
-    # RapidOCR frequently mangles / drops "Observed flags: biohazard_red".
-    # If this looks like a B-13 (or note) without a usable flag line, retry tess.
+    # RapidOCR frequently mangles / drops "Observed flags: biohazard_red"
+    # and Fee Status values on full-page scans. Retry Tesseract when the
+    # page looks like B-13 / note / fee without a usable value line.
     has_flag_line = bool(
         re.search(
             r"(?:Observed|Cbserved|Cheserved|erved)\s*(?:flags|flogs|flaga|fes)\s*:?\s*"
@@ -175,27 +350,81 @@ def _ocr_numpy(img: np.ndarray) -> str:
             re.I,
         )
     )
-    needs_tess = bool(
-        re.search(r"FORM\s*B-?13|Blometric|Biometric|Adjudicator|Finding", rapid, re.I)
-    ) and not has_flag_line
-    if needs_tess or (
+    has_fee_value = bool(
+        re.search(
+            r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
+            r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|"
+            r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)"
+            r"|\$809\.00|\bDIP-WAIVER\b",
+            rapid,
+            re.I,
+        )
+    )
+    looks_b13_note = bool(
+        re.search(
+            r"FORM\s*B-?\d{1,2}|Blometric|Biometric|Biomot|Adjudicator|Finding|"
+            r"Fnding|Findng|Scan\s*Slip|Sean\s*a",
+            rapid,
+            re.I,
+        )
+    )
+    looks_fee = bool(
+        re.search(
+            r"MIB\s*Fe[eo]?\s*R[aeo]c|Fee\s*Receipt|Fee\s*St|Waiver\s*Code|"
+            r"Amount\s*[:\n]|Feo\s*St|MIBFee\s*R",
+            rapid,
+            re.I,
+        )
+    )
+    looks_intake_cutout = bool(
+        re.search(r"NAME\s*CUT\s*OUT|PASSPORT\s*IMAGE|FORM\s*I-?8090", rapid, re.I)
+    )
+    # Full-page packet scans often OCR as sparse garbage with no form header;
+    # still try tess when Rapid text is thin but the raster is large.
+    sparse_rapid = len(re.sub(r"\s+", "", rapid or "")) < 40
+    needs_tess = (
+        (looks_b13_note and not has_flag_line)
+        or (looks_fee and not has_fee_value)
+        or (looks_intake_cutout and re.search(r"NAME\s*CUT\s*OUT", rapid, re.I))
+    )
+    # Weak B-13 morphs (B-12 / Biomotie) also need tess — Rapid drops flag lines.
+    looks_weak_b13 = bool(
+        re.search(r"B-1[123]|Biomot|Bonotice|Sean\s*a|Scan\s*Slip", rapid, re.I)
+    )
+    # sparse_rapid→tess is the runaway path (huge rasters, little signal).
+    # Off by default under MIB_TESS_FAST; otherwise require very large pages.
+    allow_sparse_tess = os.environ.get("MIB_TESS_SPARSE", "").strip() in {"1", "true", "yes"}
+    fast = os.environ.get("MIB_TESS_FAST", "").strip() in {"1", "true", "yes"}
+    sparse_ok = (not fast) and allow_sparse_tess and sparse_rapid and img.shape[0] >= 1000 and img.shape[1] >= 800
+    if needs_tess or looks_weak_b13 or (
         re.search(r"FORM\s*B-?13|Blometric", rapid, re.I)
         and re.search(r"RISK\s*PANEL\s*MISSING|IRISKPANEL", rapid, re.I)
-    ):
+    ) or sparse_ok:
         try:
-            tess = _ocr_tesseract(img)
+            # Prefer header crop for B-13/note: flags/Finding live in the top band.
+            tess_img = img
+            if (looks_b13_note or looks_weak_b13) and img.shape[0] >= 600 and cv2 is not None:
+                top = img[: int(img.shape[0] * 0.42), :]
+                # Upscale header for thin flag glyphs
+                top = cv2.resize(top, None, fx=1.8, fy=1.8, interpolation=cv2.INTER_CUBIC)
+                tess_img = top
+            tess = _ocr_tesseract(tess_img)
             tess_has_signal = bool(
                 re.search(
-                    r"(?:Observed|Cbserved|Cheserved|erved)\s*(?:flags|flogs|fes)"
-                    r"|Finding\s*:?\s*(APPROVED|DENIED|NEEDS_REVIEW)"
-                    r"|h[ae][zx][ae]?r?d|warrant|tamper|embargo|biohazard",
+                    r"(?:Observed|Cbserved|Cheserved|erved|Corer)\s*(?:flags|flogs|fes|pars)"
+                    r"|F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)"
+                    r"|h[ae][zx][ae]?r?d|warrant|tamper|embargo|biohazard|embogo|emro"
+                    r"|Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
+                    r"(unpaid|paid|waived|unknown|unp|urp|upold|pald|pold|waved)"
+                    r"|\$809\.00|\bDIP-WAIVER\b",
                     tess,
                     re.I,
                 )
             )
             if tess and (tess_has_signal or len(tess) > len(rapid) + 10):
                 if tess_has_signal:
-                    return tess
+                    # Keep Rapid too — sometimes has complementary tokens
+                    return (rapid + "\n" + tess) if rapid and rapid not in tess else tess
                 if not rapid:
                     return tess
                 return rapid + "\n" + tess
@@ -208,6 +437,24 @@ def _normalize_ocr_spacing(text: str) -> str:
     """Insert spaces into common glued OCR tokens from RapidOCR."""
     replacements = [
         (r"FORMB-13", "FORM B-13"),
+        (r"FORM\s*B-12", "FORM B-13"),  # RapidOCR B-13→B-12
+        (r"POR[a-z0-9!]*\s*B-1[123]", "FORM B-13"),
+        (r"Biomot\w*", "Biometric"),
+        (r"Bonotice", "Biometric"),
+        (r"Sean\s*a[luy]*", "Scan Slip"),
+        (r"Fnding\s*:?\s*DENED", "Finding: DENIED"),
+        (r"Findng\s*:?\s*DENIED", "Finding: DENIED"),
+        (r"FndingDENIED", "Finding: DENIED"),
+        (r"FindngDENIED", "Finding: DENIED"),
+        (r"FndingDENED", "Finding: DENIED"),
+        (r"plontary_emro", "planetary_embargo"),
+        (r"plnetary_embogo", "planetary_embargo"),
+        (r"plery_emo", "planetary_embargo"),
+        (r"fogplontary_emro", "planetary_embargo"),
+        (r"flogplontary_emro", "planetary_embargo"),
+        (r"flogplnetary_embogo", "planetary_embargo"),
+        (r"biohazard_ed\b", "biohazard_red"),
+        (r"biohazard\s+re\b", "biohazard_red"),
         (r"FORMI-8090", "FORM I-8090"),
         (r"MIBFeeReceipt", "MIB Fee Receipt"),
         (r"MIBFeeRereint", "MIB Fee Receipt"),
@@ -217,6 +464,15 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"MIB Feo Rocoipt", "MIB Fee Receipt"),
         (r"MIB Fse Receipt", "MIB Fee Receipt"),
         (r"MIBFee Receipt", "MIB Fee Receipt"),
+        (r"\bWalver Code\b", "Waiver Code"),
+        (r"\bWaiverC0de\b", "Waiver Code"),
+        (r"\bD1P[\s\-]*WAIVER\b", "DIP-WAIVER"),
+        (r"\bDlP[\s\-]*WAIVER\b", "DIP-WAIVER"),
+        (r"\bDIP[\s]+WAIVER\b", "DIP-WAIVER"),
+        (r"\bAmoumt\b", "Amount"),
+        (r"\bArnount\b", "Amount"),
+        (r"(?<!\d)[S§]\s*809(?:[.,]0O|[.,]O0|[.,]00)\b", "$809.00"),
+        (r"(?<!\d)809(?:[.,]0O|[.,]O0)\b", "809.00"),
         (r"CaseID:", "Case ID: "),
         (r"CaseID", "Case ID "),
         (r"Cose ID:", "Case ID: "),
@@ -304,9 +560,10 @@ def _ocr_embedded_images(doc: fitz.Document, page: fitz.Page) -> str:
         try:
             arr = _pixmap_to_np(pix)
             text = _normalize_ocr_spacing(_ocr_numpy(arr))
-            if any(m in text for m in USEFUL_MARKERS) or re.search(
-                r"MIB-\d{6}|SPN-?\d{4}|Observed|Fee|paid|waiv|flag", text, re.I
-            ):
+            if any(m in text for m in USEFUL_MARKERS) or _OCR_KEEP_RE.search(text or ""):
+                chunks.append(text)
+            elif text and len(re.sub(r"\s+", "", text)) >= 20 and (pix.width >= 1000):
+                # Large scan with weak OCR — still keep; extract may recover flags.
                 chunks.append(text)
         except Exception:
             continue
@@ -316,7 +573,12 @@ def _ocr_embedded_images(doc: fitz.Document, page: fitz.Page) -> str:
 def _ocr_page_render(page: fitz.Page, dpi: int = 120) -> str:
     pix = page.get_pixmap(dpi=dpi, alpha=False)
     arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
-    return _normalize_ocr_spacing(_ocr_numpy(arr))
+    text = _normalize_ocr_spacing(_ocr_numpy(arr))
+    if not _has_fee_value(text):
+        fee_header = _ocr_fee_header(arr)
+        if fee_header and fee_header not in text:
+            text = (text + "\n" + fee_header).strip() if text else fee_header
+    return text
 
 
 def _has_fee_value(text: str) -> bool:
@@ -384,7 +646,13 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                             rendered = _ocr_page_render(page, dpi=ocr_dpi)
                             if (
                                 any(m in rendered for m in USEFUL_MARKERS)
-                                or re.search(r"Fee|paid|waiv|Observed|SPN|Home World|Visa", rendered, re.I)
+                                or _OCR_KEEP_RE.search(rendered or "")
+                                or re.search(
+                                    r"Fee|paid|waiv|Observed|SPN|Home World|Visa|Finding|DENIED|"
+                                    r"B-1[123]|Biomot|Adjudicat",
+                                    rendered,
+                                    re.I,
+                                )
                             ):
                                 ocr_text = rendered if len(rendered) >= len(ocr_text) else ocr_text
                     except Exception:

@@ -85,4 +85,9 @@ STALE_DAYS = 180
 # Latent restricted world (train: Wolf-1061c + non-DIP always DENY even without flag)
 RESTRICTED_WORLDS = {"Wolf-1061c"}
 
+# Train: every Eris Relay / TRAPPIST-1e row is DENIED (always carries planetary_embargo
+# in labels). When the flag is invisible in the PDF, home_world alone is sufficient.
+# Applies to ALL visas including DIP-1 (unlike Wolf).
+EMBARGO_WORLDS = {"Eris Relay", "TRAPPIST-1e"}
+
 SPECIAL_UNREADABLE = {"UNREADABLE", "[NAME CUT OUT]", "[FEE STATUS OBSCURED]", "N/A", ""}

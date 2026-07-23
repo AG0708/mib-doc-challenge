@@ -79,6 +79,25 @@ FEE_TOKEN_MAP = {
     "unknow": "unknown",
 }
 
+DIP_WAIVER_RE = re.compile(
+    r"\bD(?:I|1|l|L)P[-\s]*WAI(?:V|Y)(?:E|F)R\b",
+    re.I,
+)
+
+AMOUNT_809_RE = re.compile(
+    r"(?:Amount|Amoumt|Arnount)\s*[:.]?\s*[$S§]?\s*809(?:[.,](?:00|0O|O0))?\b"
+    r"|\b[$S§]\s*809(?:[.,](?:00|0O|O0))\b",
+    re.I,
+)
+
+
+def _has_dip_waiver(text: str) -> bool:
+    return bool(DIP_WAIVER_RE.search(text or ""))
+
+
+def _has_amount_809(text: str) -> bool:
+    return bool(AMOUNT_809_RE.search(text or ""))
+
 
 @dataclass
 class Evidence:
@@ -399,8 +418,20 @@ def _clean_value(field: str, value: str) -> str | None:
             "teohazard_red": "biohazard_red",
             "planetaryembargo": "planetary_embargo",
             "planetary_embargo": "planetary_embargo",
+            "plontary_emro": "planetary_embargo",
+            "plnetary_embogo": "planetary_embargo",
+            "plery_emo": "planetary_embargo",
+            "planetary_emro": "planetary_embargo",
+            "planetaryembogo": "planetary_embargo",
+            "planetary_emo": "planetary_embargo",
+            "gpney_emo": "planetary_embargo",
+            "ney_emo": "planetary_embargo",
+            "pney_emo": "planetary_embargo",
             "activewarrant": "active_warrant",
             "memorytampering": "memory_tampering",
+            "biohazard_ed": "biohazard_red",
+            "biohazardre": "biohazard_red",
+            "biohazard_re": "biohazard_red",
             "identityconflict": "identity_conflict",
             "sponsormismatch": "sponsor_mismatch",
             "illegiblebiometrics": "illegible_biometrics",
@@ -417,13 +448,25 @@ def _clean_value(field: str, value: str) -> str | None:
                 parts.append(canon)
         # Fuzzy match mangled OCR like "legltlebiomatice"
         blob = re.sub(r"[^a-z]", "", low)
-        # OCR biohazard variants. Require a bio-/tro-/bich- prefix OR a real
-        # *hazard*/*hanard*/*hexard* core — bare "hand" (e.g. andromedan) must not match.
+        # OCR biohazard / embargo variants.
         if re.search(
             r"(?:bio|tro|teo|biha|bich|biche)h[ae][nzx][ae]?r?d",
             blob,
         ) or re.search(r"h[ae][zx]ard", blob) or "hanard" in blob or "hazerd" in blob:
             parts.append("biohazard_red")
+        # planetary_embargo OCR crumbs (plontary_emro / embogo / gpney_emo)
+        if (
+            "embargo" in blob
+            or "embogo" in blob
+            or "emro" in blob
+            or re.search(r"plan\w{0,6}em[bp]", blob)
+            or re.search(r"(?:gp)?neyemo", blob)
+        ):
+            parts.append("planetary_embargo")
+        if "warrant" in blob or re.search(r"active\w{0,4}warr", blob):
+            parts.append("active_warrant")
+        if "tamper" in blob or "memorytamper" in blob:
+            parts.append("memory_tampering")
         for flag in known:
             fc = re.sub(r"[^a-z]", "", flag)
             if fc in blob or (len(blob) <= 40 and SequenceMatcher(None, blob, fc).ratio() >= 0.72):
@@ -565,20 +608,41 @@ def _parse_note(text: str) -> tuple[str | None, bool, list[str], str | None]:
 
     FIELD_MANUAL: do not trust Finding stamps for the final decision, but
     mentioned disqualifying flags in the signed note are visible evidence.
+    Train: Finding lines match labels when recoverable — trust them in rules.
     """
     finding = None
-    m = re.search(r"Finding\s*:?\s*(APPROVED|DENIED|NEEDS_REVIEW)\.?", text, re.I)
+    m = re.search(
+        r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)\.?",
+        text,
+        re.I,
+    )
     if m:
         finding = m.group(1).upper()
+        if finding == "DENED":
+            finding = "DENIED"
+    # OCR sometimes drops "Finding:" and leaves DENIED near Adjudicator
+    if finding is None and re.search(r"Adjudicat", text, re.I):
+        if re.search(r"\bDENIED\b|\bDENED\b|\bNIED\b", text, re.I) and not re.search(
+            r"\bAPPROVED\b", text, re.I
+        ):
+            # Prefer DENIED when SAMPLE DENIAL watermark isn't the only hit —
+            # require reason/flag context or Finding morph.
+            if re.search(
+                r"reason|disqualif|risk\s*flag|biohazard|embargo|warrant|tamper|Find",
+                text,
+                re.I,
+            ):
+                finding = "DENIED"
     suggests = (
         "Manual Adjudicator Note" in text
         or "Manual AdjudicatorNote" in text
-        or bool(re.search(r"Manual\s*Adjudicator", text, re.I))
+        or bool(re.search(r"Manual\s*Adjudicator|Adjudicator\s*Note", text, re.I))
         or bool(re.search(r"^\s*REVIEW\s*$", text, re.M))
     )
     flags = []
     for fm in re.finditer(
-        r"(?:risk\s*flags?|disqualif\w*\s*(?:risk\s*)?flags?|disqualif\w*riskflag)\s*:?\s*([a-z_|, \-]+)",
+        r"(?:risk\s*flags?|disqualif\w*\s*(?:risk\s*)?flags?|disqualif\w*riskflag|"
+        r"disqualif\w*\s*rlsk\s*fog|Dlqul\w*)\s*:?\s*([a-z_|, \-]+)",
         text,
         re.I,
     ):
@@ -601,13 +665,17 @@ def _parse_note(text: str) -> tuple[str | None, bool, list[str], str | None]:
             flags.append(flag)
     # OCR mangled reason tokens (bihazardred) — clean short reason snippets only
     for fm in re.finditer(
-        r"(?:Reason|flag)\s*:?\s*([A-Za-z0-9_| \-]{3,40})",
+        r"(?:Reason|flag|fog|flog)\s*:?\s*([A-Za-z0-9_| \-]{3,60})",
         text,
         re.I,
     ):
         cleaned = _clean_value("risk_flags", fm.group(1))
         if cleaned and cleaned != "none":
             flags.extend(cleaned.split("|"))
+    # Whole-note flag recovery for heavy OCR damage (planetary_emro / biohazard_ed)
+    blob_flags = _clean_value("risk_flags", re.sub(r"\s+", " ", text)[:500])
+    if blob_flags and blob_flags != "none":
+        flags.extend(blob_flags.split("|"))
     fee_hint = None
     if re.search(
         r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee|fee\s+not\s+paid|fee\s+status\s*[:\s]*unpaid",
@@ -831,8 +899,12 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             pt == "note"
             or "Manual Adjudicator Note" in text
             or "Manual AdjudicatorNote" in text
-            or re.search(r"Manual\s*Adjudicator", text, re.I)
-            or re.search(r"Finding\s*:?\s*(APPROVED|DENIED|NEEDS_REVIEW)", text, re.I)
+            or re.search(r"Manual\s*Adjudicator|Adjudicator\s*Note", text, re.I)
+            or re.search(
+                r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)",
+                text,
+                re.I,
+            )
         ):
             finding, suggests, note_flags, fee_hint = _parse_note(text)
             note_finding = finding or note_finding
@@ -847,7 +919,7 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             pt == "biometric"
             or "Observed flags" in text
             or "Observedflags" in text.replace(" ", "")
-            or re.search(r"FORM\s*B-?13|Blometric", text, re.I)
+            or re.search(r"FORM\s*B-?\d{1,2}|Blometric|Biomot|Biometric\s*Scan", text, re.I)
         ):
             saw_biometric_flags = True
             # Only blob-mine when there is no usable Observed-flags line.
@@ -855,7 +927,7 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             # hits (e.g. "hand" inside ANDROMEDAN).
             has_explicit_flags = bool(
                 re.search(
-                    r"(?:Observed|Cbserved|Cheserved|erved)\s*(?:flags|flogs|fes)\s*:?\s*\S+",
+                    r"(?:Observed|Cbserved|Cheserved|erved|Corer)\s*(?:flags|flogs|fes|pars)\s*:?\s*\S+",
                     text,
                     re.I,
                 )
@@ -902,14 +974,21 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     saw_unreadable_arrival = any(
         field == "arrival_date" and value == "UNREADABLE" for field, value, _tier, _src in field_items
     )
+    # Blank-intake detection. Prefer typed intake pages; `_looks_like_intake` on
+    # OCR noise invents false "Arrival Date" headers and was over-triggering
+    # evidence_needs_review on otherwise clean APPROVED packets (A→R).
     intake_arrival_blank = False
+    intake_blank_strict = False
     for page in packet.pages:
         pt = page.page_type
         text = page.trusted_text or ""
-        if pt == "intake" or _looks_like_intake(text):
+        if pt == "intake":
             if _intake_arrival_blank(text):
+                intake_blank_strict = True
                 intake_arrival_blank = True
-                break
+        elif _looks_like_intake(text) and _intake_arrival_blank(text):
+            # Soft signal only — confirmed below if arrival was not intake-sourced.
+            intake_arrival_blank = True
 
     def take(field: str):
         ev = best.get(field)
@@ -997,10 +1076,13 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
                 continue
             if key == "fee_status":
                 ev = sys_best.get(key)
-                # Train: when SYSTEM fee disagrees with a visible receipt, SYSTEM
-                # matched labels in the disagreement sample. Prefer SYSTEM fee.
                 if ev and ev.value not in (None, "OBSCURED"):
-                    if result.fee_status != ev.value:
+                    # Hidden SYSTEM fields are useful backstops, but they should
+                    # not overwrite an explicit visible receipt value (or an
+                    # explicitly obscured receipt that should stay unknown).
+                    visible_fee_source = result.sources.get("fee_status", "")
+                    visible_fee_locked = bool(visible_fee_source) or result.fee_obscured
+                    if result.fee_status is None and not visible_fee_locked:
                         result.fee_status = ev.value
                         result.sources["fee_status"] = "system_fields"
                 continue
@@ -1025,16 +1107,8 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     # - Amount $0.00 alone is ambiguous — do NOT map to waived without DIP-WAIVER
     # Applied after SYSTEM fill so visible receipt amounts beat SYSTEM when present.
     blob = packet.trusted_text
-    has_dip_waiver = bool(
-        re.search(r"Waiver Code\s*\n\s*DIP-WAIVER", blob, re.I)
-        or re.search(r"Waiver Code:\s*DIP-WAIVER", blob, re.I)
-        or re.search(r"\bDIP-WAIVER\b", blob, re.I)
-    )
-    has_amount_809 = bool(
-        re.search(r"Amount\s*\n\s*\$809\.00", blob)
-        or re.search(r"Amount:\s*\$809\.00", blob)
-        or re.search(r"\$809\.00", blob)
-    )
+    has_dip_waiver = _has_dip_waiver(blob)
+    has_amount_809 = _has_amount_809(blob)
     if has_dip_waiver:
         if result.fee_status != "waived":
             result.fee_status = "waived"
@@ -1049,10 +1123,6 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         if note_fee_hint:
             result.fee_status = note_fee_hint
             result.sources["fee_status"] = "note_fee_hint"
-        elif re.search(r"Finding:\s*APPROVED", blob, re.I):
-            # Train: Finding APPROVED never co-occurs with unpaid/unknown.
-            result.fee_status = "paid"
-            result.sources["fee_status"] = "note_approved_implies_paid"
         else:
             # Loose OCR: "Fee Status" line mangled but paid/waived/unpaid token nearby
             m = re.search(
@@ -1066,6 +1136,21 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
                 if cleaned and cleaned != "OBSCURED":
                     result.fee_status = cleaned
                     result.sources["fee_status"] = "loose_fee_status"
+            # Bare status tokens near a fee-receipt header (OCR dropped the label)
+            if result.fee_status is None and re.search(
+                r"MIB\s*Fe[eo]?\s*R[aeo]c|Fee\s*Receipt|Waiver\s*Code|MIBFee\s*R", blob, re.I
+            ):
+                m2 = re.search(
+                    r"(?<![A-Za-z])(unpaid|unpald|unpold|unpaic|urpald|upold|paid|pald|pold|"
+                    r"waived|waved|walved|unknown)(?![A-Za-z])",
+                    blob,
+                    re.I,
+                )
+                if m2:
+                    cleaned = _clean_value("fee_status", m2.group(1))
+                    if cleaned and cleaned != "OBSCURED":
+                        result.fee_status = cleaned
+                        result.sources["fee_status"] = "loose_fee_receipt_token"
             # Note fee unpaid can appear even when no fee page was typed
             if result.fee_status is None and re.search(
                 r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee", blob, re.I
@@ -1118,15 +1203,39 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     # Evidence review triggers (document-level)
     if result.arrival_unreadable:
         result.evidence_needs_review = True
-    # Blank intake arrival filled from registry/SYSTEM → still REVIEW
+    # Blank intake arrival filled from registry/SYSTEM → still REVIEW.
+    # If arrival was recovered from intake/correction itself, a blank signal on
+    # another OCR'd page is a false positive — do not force REVIEW (A→R).
     if intake_arrival_blank:
-        result.evidence_needs_review = True
         src = result.sources.get("arrival_date", "")
-        if src.startswith("registry") or src.startswith("system") or not result.arrival_date:
-            # Stronger gate: treat as missing trusted arrival for rules
-            result.arrival_unreadable = True
+        intake_sourced = bool(result.arrival_date) and (
+            src.startswith("intake") or src.startswith("correction") or src.startswith("fee")
+        )
+        if intake_sourced and not intake_blank_strict:
+            intake_arrival_blank = False
+        elif intake_sourced and intake_blank_strict:
+            # Strict intake page blank but another field source won with a date
+            # from intake-tier evidence — trust the date, skip REVIEW gate.
+            intake_arrival_blank = False
+        else:
+            result.evidence_needs_review = True
+            if src.startswith("registry") or src.startswith("system") or not result.arrival_date:
+                # Stronger gate: treat as missing trusted arrival for rules
+                result.arrival_unreadable = True
     if result.name_cut_out and not result.applicant_name:
-        result.evidence_needs_review = True
+        # Name redaction hurts extraction score but should not alone force
+        # adjudication REVIEW when B-13 flags were observed and decision
+        # fields (visa/arrival/sponsor) are intact — that over-REVIEWed
+        # true APPROVED DIP packets (A→R) and blocked fee_imputed_safe.
+        decision_ok = bool(
+            result.visa_class
+            and result.arrival_date
+            and not result.arrival_unreadable
+            and (result.visa_class == "DIP-1" or (result.sponsor_id and result.sponsor_id != "SPN-0000"))
+        )
+        bio_observed = "risk_flags" in result.sources
+        if not (decision_ok and bio_observed and result.risk_flags in (None, "none")):
+            result.evidence_needs_review = True
     if result.fee_obscured and not result.fee_status:
         result.fee_status = "unknown"
         result.evidence_needs_review = True
@@ -1137,12 +1246,128 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         # Train: Finding NEEDS_REVIEW notes are trusted (never false vs labels).
         result.evidence_needs_review = True
     elif note_review and note_finding == "NEEDS_REVIEW":
-        # Soft signal only when we also lack key fields or have conflicts
-        if result.arrival_unreadable or conflicts or result.fee_status == "unknown":
+        # Soft signal only when we also lack key fields or have decision conflicts
+        decision_conflict = any(
+            c.split(":", 1)[0]
+            in {
+                "fee_status",
+                "risk_flags",
+                "visa_class",
+                "sponsor_id",
+                "home_world",
+                "arrival_date",
+            }
+            for c in conflicts
+        )
+        if result.arrival_unreadable or decision_conflict or result.fee_status == "unknown":
             result.evidence_needs_review = True
     if conflicts:
-        # Conflicting trusted sources → review
+        # Only decision-critical conflicts force document-level REVIEW.
+        # Name/species/purpose OCR disagreements are common on otherwise clean
+        # APPROVED packets and were over-triggering NEEDS_REVIEW (A→R).
+        decision_conflict = any(
+            c.split(":", 1)[0]
+            in {
+                "fee_status",
+                "risk_flags",
+                "visa_class",
+                "sponsor_id",
+                "home_world",
+                "arrival_date",
+            }
+            for c in conflicts
+        )
+        if decision_conflict:
+            result.evidence_needs_review = True
+
+    # Thin-evidence APPROVE→REVIEW gates (train-sim positive EV; never DENY):
+    # Deny flags sometimes exist only in labels with no recoverable B-13/note/
+    # SYSTEM text. Broad "no B-13" / "all MED-3" gates destroy true APPROVED.
+    # These two are high-precision smells when biometric flags were never seen.
+    no_bio_flags = (not saw_biometric_flags) and (
+        result.risk_flags in (None, "none")
+    ) and ("risk_flags" not in result.sources)
+    if (
+        has_dip_waiver
+        and result.visa_class
+        and result.visa_class != "DIP-1"
+        and no_bio_flags
+    ):
+        # DIP-WAIVER on a non-DIP visa without any Observed-flags source
+        # (RECON: waiver/class smell → residual REVIEW).
         result.evidence_needs_review = True
+    if (
+        result.visa_class == "MED-3"
+        and (result.declared_purpose or "").casefold() == "diplomatic"
+        and no_bio_flags
+    ):
+        # Diplomatic purpose on MED-3 with no B-13 flags channel — train: 3/4
+        # of clean-APPROVE preds in this bucket are hidden deny-flag DENIEDs.
+        result.evidence_needs_review = True
+
+    # Page-structure smells for invisible deny-flag packets (never invent flags).
+    # Native = page classified without OCR replace/append. Trap fee pages and
+    # image-only intakes set used_ocr=True; missing registry is a second hole.
+    # Train sim (v7 APPROVED pool): MED-3 + no bio source + sponsor + (!native
+    # fee OR !registry) catches hard FAs 033/330/548 at ~neutral EV vs TA.
+    has_sponsor_page = any(
+        p.page_type == "sponsor" or "Sponsor Attestation" in (p.trusted_text or "")
+        for p in packet.pages
+    )
+    has_registry_page = any(p.page_type == "registry" for p in packet.pages)
+    native_fee_page = any(p.page_type == "fee" and not p.used_ocr for p in packet.pages)
+    native_intake_page = any(p.page_type == "intake" and not p.used_ocr for p in packet.pages)
+    native_bio_page = any(p.page_type == "biometric" and not p.used_ocr for p in packet.pages)
+    has_garbled_unknown = any(
+        p.page_type == "unknown"
+        and p.used_ocr
+        and len(re.sub(r"\s+", "", p.trusted_text or "")) >= 24
+        and not re.search(
+            r"FORM\s*I-8090|Fee Status|Registry Status|Sponsor Attestation|Observed\s*flags|Visa Class",
+            p.trusted_text or "",
+            re.I,
+        )
+        for p in packet.pages
+    )
+    if (
+        result.visa_class == "MED-3"
+        and no_bio_flags
+        and has_sponsor_page
+        and (not native_fee_page or not has_registry_page or has_garbled_unknown)
+    ):
+        # Incomplete MED-3 dossier: sponsor letter present but B-13 flags channel
+        # absent AND (fee only via OCR/trap OR registry missing OR garbled page).
+        result.evidence_needs_review = True
+
+    # Image-only I-8090 + DIP-WAIVER on XW-* with no native B-13 text: visa/waiver
+    # smell (RECON MIB-000152). Catches TRANSIT-7 misread as XW with invisible
+    # class on the passport raster (MIB-000865). Tight: requires both intake and
+    # bio to lack a native text layer.
+    if (
+        has_dip_waiver
+        and result.visa_class in {"XW-1", "XW-2"}
+        and not native_intake_page
+        and not native_bio_page
+        and result.risk_flags in (None, "none")
+    ):
+        result.evidence_needs_review = True
+
+    # B-13 / biometric page seen but Observed-flags never resolved to a known
+    # token (including confirmed "none"). Do NOT invent deny flags — REVIEW.
+    # High precision: we know the biometric channel exists but is unreadable.
+    if saw_biometric_flags and result.risk_flags in (None, "none"):
+        # If sources say biometric and we never saw an explicit "none" token
+        # in any page text, the flags line was lost to OCR.
+        saw_explicit_none = any(
+            re.search(
+                r"(?:Observed|Cbserved|Cheserved|erved|Corer)\s*(?:flags|flogs|fes|pars)\s*:?\s*none\b",
+                p.trusted_text or p.raw_text or "",
+                re.I,
+            )
+            for p in packet.pages
+        )
+        if not saw_explicit_none and result.sources.get("risk_flags") != "system_fields":
+            result.evidence_needs_review = True
 
     # Normalize sponsor format
     if result.sponsor_id:

@@ -44,9 +44,12 @@ not set cgroup limits, then run `evaluate.py` on the output.
 
 Working solution copy: `/home/ubuntu/mib-solution` (synced into `submissions/AG0708/solution/`).
 
-- Train score loop: `MIB_WORKERS=4 OMP_THREAD_LIMIT=1 python3 solution.py data/train /tmp/pred.jsonl` then `scripts/evaluate.py`.
+- Train score loop (fast/safe on 4-CPU VMs):  
+  `MIB_WORKERS=2 MIB_TESS_FAST=1 MIB_TESS_TIMEOUT=12 MIB_TESS_SLOTS=2 MIB_OCR_DPI=110 OMP_THREAD_LIMIT=1 python3 -u solution.py data/train /tmp/pred.jsonl`  
+  then `scripts/evaluate.py`. Bench: ~30 PDFs/min → ~35–45 min for train/1000. Do **not** use 4 workers without tess timeouts — unbounded `pytesseract` previously piled up 30+ hung processes (load >150).
+- OCR knobs: `MIB_TESS_TIMEOUT` (seconds, default 15), `MIB_TESS_SLOTS` (cross-process flock cap, default 2), `MIB_TESS_FAST=1` (skip BW retry + sparse tess), `MIB_OCR_DPI` (default 120).
 - `MIB_TEXT_ONLY=1` skips OCR for fast rule/field iteration (~8s/1000).
-- Validation (5000 PDFs) takes on the order of 1–3 hours with OCR; write incrementally only at end.
+- Validation (5000 PDFs) with the fast OCR settings is on the order of ~2–3 hours; predictions write only at end.
 - Prefer plain `docker run --network none` (see caveat above); contest cgroup flags fail here.
 - Do **not** trust SYSTEM trap adjudications; fields inside those traps are useful fill-ins. Visible `Finding:` notes are high-precedence trusted evidence per `FIELD_MANUAL.md`.
 
