@@ -1,22 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { mutate as globalMutate } from "swr";
 import { CRM_STAGES, TEAM } from "@/data/seed";
-import type { CrmStage } from "@/data/types";
-import { useOps } from "@/lib/ops-store";
-import { cn, formatCompact, formatUsd } from "@/lib/utils";
+import { useCreators } from "@/lib/api";
+import { api, cn, formatCompact, formatUsd } from "@/lib/utils";
 import { formatRelative, dateOnly } from "@/lib/time";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   PageHeader,
   Badge,
-  Avatar,
   Button,
   Field,
   Select,
-  PlatformDot,
+  Avatar,
+  Empty,
 } from "@/components/ui/primitives";
 
-const STAGE_TONE: Record<CrmStage, "neutral" | "signal" | "heat" | "amber" | "ink"> = {
+const STAGE_TONE: Record<string, "neutral" | "signal" | "heat" | "amber" | "ink"> = {
   signed: "neutral",
   onboarding: "amber",
   first_post: "signal",
@@ -26,81 +27,72 @@ const STAGE_TONE: Record<CrmStage, "neutral" | "signal" | "heat" | "amber" | "in
 };
 
 export default function CrmPage() {
-  const { creators, setCreatorStage, nudgeCreator } = useOps();
+  const { push } = useToast();
   const [q, setQ] = useState("");
   const [manager, setManager] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [activeId, setActiveId] = useState(creators[0]?.id);
-  const [log, setLog] = useState<string[]>([
-    "Webhook: payment_connected verified",
-    "Manager assigned content guidelines",
-  ]);
-
-  const filtered = useMemo(() => {
-    return creators.filter((c) => {
-      const matchQ =
-        !q ||
-        c.name.toLowerCase().includes(q.toLowerCase()) ||
-        c.handle.toLowerCase().includes(q.toLowerCase());
-      const matchM = manager === "all" || c.manager === manager;
-      const matchS = stageFilter === "all" || c.stage === stageFilter;
-      return matchQ && matchM && matchS;
-    });
-  }, [creators, q, manager, stageFilter]);
-
-  const active = creators.find((c) => c.id === activeId) ?? filtered[0];
+  const [stage, setStage] = useState("all");
+  const query = `?q=${encodeURIComponent(q)}&manager=${manager}&stage=${stage}`;
+  const { data, isLoading, mutate } = useCreators(query);
+  const rows = data?.data ?? [];
+  const { data: allData } = useCreators("");
+  const all = allData?.data ?? [];
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const active = rows.find((c) => c.id === activeId) ?? rows[0] ?? null;
 
   const funnel = CRM_STAGES.map((s) => ({
     ...s,
-    count: creators.filter((c) => c.stage === s.id).length,
+    count: all.filter((c) => c.stage === s.id).length,
   }));
 
-  function advance(id: string, stage: CrmStage) {
-    setCreatorStage(id, stage);
-    setLog((prev) => [
-      `Stage → ${stage.replace("_", " ")} · ${new Date().toLocaleTimeString()}`,
-      ...prev,
-    ].slice(0, 6));
+  async function patch(id: string, body: Record<string, unknown>) {
+    await api("/api/creators", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...body }),
+    });
+    await mutate();
+    await globalMutate("/api/creators");
+    await globalMutate("/api/activity");
+    await globalMutate((k) => typeof k === "string" && k.startsWith("/api/metrics"));
+  }
+
+  async function advance(id: string, next: string) {
+    await patch(id, { stage: next });
+    setActiveId(id);
+    push({ title: "CRM updated", detail: next.replaceAll("_", " "), tone: "ok" });
   }
 
   return (
-    <div>
+    <div className="animate-rise">
       <PageHeader
-        eyebrow="Pipeline · CRM"
-        title="Onboarding without drift."
-        description="Signed to live with live webhook state — managers and Slack bots never disagree."
+        title="CRM"
+        description="Onboarding pipeline backed by the creators table. Stage changes persist and fan out to activity."
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        {funnel.map((s, i) => (
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {funnel.map((s) => (
           <button
             key={s.id}
             type="button"
-            onClick={() =>
-              setStageFilter((cur) => (cur === s.id ? "all" : s.id))
-            }
+            onClick={() => setStage((cur) => (cur === s.id ? "all" : s.id))}
             className={cn(
-              "panel animate-rise rounded-xl px-3 py-3 text-left transition",
-              stageFilter === s.id && "ring-2 ring-ink",
+              "card px-3 py-3 text-left",
+              stage === s.id && "ring-2 ring-ink",
             )}
-            style={{ animationDelay: `${i * 40}ms` }}
           >
-            <p className="mono text-[10px] uppercase tracking-[0.14em] text-muted">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
               {s.label}
             </p>
-            <p className="mono mt-1 text-2xl font-semibold tracking-tight">
-              {s.count}
-            </p>
+            <p className="mono mt-1 text-2xl font-semibold">{s.count}</p>
           </button>
         ))}
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+      <div className="mb-4 flex flex-wrap gap-2">
         <Field
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search creators…"
-          className="sm:max-w-xs"
+          className="max-w-xs"
         />
         <Select value={manager} onChange={(e) => setManager(e.target.value)}>
           <option value="all">All managers</option>
@@ -110,51 +102,53 @@ export default function CrmPage() {
             </option>
           ))}
         </Select>
-        {stageFilter !== "all" && (
-          <Button onClick={() => setStageFilter("all")}>Clear stage</Button>
-        )}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.95fr]">
-        <div className="panel overflow-hidden rounded-2xl">
+      {isLoading && <Empty label="Loading creators from DB…" />}
+
+      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+        <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="border-b border-line bg-white/50 text-[11px] uppercase tracking-[0.12em] text-muted">
+              <thead className="border-b border-line bg-bg text-[11px] uppercase tracking-[0.1em] text-muted">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Creator</th>
-                  <th className="px-4 py-3 font-medium">Stage</th>
-                  <th className="px-4 py-3 font-medium">Manager</th>
-                  <th className="px-4 py-3 font-medium">30d views</th>
-                  <th className="px-4 py-3 font-medium">Joined</th>
+                  <th className="px-3 py-2.5 font-medium">Creator</th>
+                  <th className="px-3 py-2.5 font-medium">Stage</th>
+                  <th className="px-3 py-2.5 font-medium">Manager</th>
+                  <th className="px-3 py-2.5 font-medium">Views</th>
+                  <th className="px-3 py-2.5 font-medium">Joined</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => (
+                {rows.map((c) => (
                   <tr
                     key={c.id}
                     onClick={() => setActiveId(c.id)}
                     className={cn(
-                      "cursor-pointer border-b border-line/70 transition hover:bg-white/60",
-                      active?.id === c.id && "bg-white/85",
+                      "cursor-pointer border-b border-line hover:bg-bg",
+                      active?.id === c.id && "bg-signal-soft/50",
                     )}
                   >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
                         <Avatar name={c.name} size="sm" />
                         <div>
                           <p className="font-medium">{c.name}</p>
-                          <p className="text-muted">{c.handle}</p>
+                          <p className="text-xs text-muted">{c.handle}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={STAGE_TONE[c.stage]}>
-                        {CRM_STAGES.find((s) => s.id === c.stage)?.label}
+                    <td className="px-3 py-2.5">
+                      <Badge tone={STAGE_TONE[c.stage] ?? "neutral"}>
+                        {CRM_STAGES.find((s) => s.id === c.stage)?.label ??
+                          c.stage}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-ink-soft">{c.manager}</td>
-                    <td className="mono px-4 py-3">{formatCompact(c.views30d)}</td>
-                    <td className="mono px-4 py-3 text-muted">
+                    <td className="px-3 py-2.5 text-ink-soft">{c.manager}</td>
+                    <td className="mono px-3 py-2.5">
+                      {formatCompact(c.views30d)}
+                    </td>
+                    <td className="mono px-3 py-2.5 text-muted">
                       {dateOnly(c.joinedAt)}
                     </td>
                   </tr>
@@ -165,120 +159,81 @@ export default function CrmPage() {
         </div>
 
         {active && (
-          <aside className="panel animate-rise rounded-2xl p-5">
+          <aside className="card p-4">
             <div className="flex items-start gap-3">
-              <Avatar name={active.name} size="lg" />
+              <Avatar name={active.name} />
               <div>
-                <p className="mono text-[11px] uppercase tracking-[0.16em] text-muted">
-                  Creator record
-                </p>
-                <h3 className="display text-3xl leading-none">{active.name}</h3>
-                <p className="mt-1 text-sm text-muted">
-                  {active.handle} · {active.city} ·{" "}
-                  <PlatformDot platform={active.platform} />
+                <h3 className="text-xl font-semibold">{active.name}</h3>
+                <p className="text-sm text-muted">
+                  {active.handle} · {active.city} · {active.platform}
                 </p>
                 <p className="mono mt-1 text-[11px] text-muted">
-                  {active.email} · {active.timezone}
+                  {active.email}
                 </p>
               </div>
             </div>
-
             <a
               href={active.deepLink}
               target="_blank"
               rel="noreferrer"
-              className="mt-3 block truncate rounded-lg border border-line bg-white/70 px-3 py-2 text-xs text-signal-deep hover:bg-white"
+              className="mt-3 block truncate rounded-lg border border-line bg-bg px-3 py-2 text-xs text-signal"
             >
               {active.deepLink}
             </a>
-
-            <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
-              <div className="rounded-xl border border-line bg-white/60 p-3">
-                <dt className="text-muted">Standing</dt>
-                <dd className="mt-1 font-semibold capitalize">
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Standing</dt>
+                <dd className="mt-0.5 font-semibold capitalize">
                   {active.standing.replace("_", " ")}
                 </dd>
               </div>
-              <div className="rounded-xl border border-line bg-white/60 p-3">
-                <dt className="text-muted">Rate</dt>
-                <dd className="mt-1 font-semibold">{active.rate}</dd>
-              </div>
-              <div className="rounded-xl border border-line bg-white/60 p-3">
-                <dt className="text-muted">Revenue 30d</dt>
-                <dd className="mono mt-1 font-semibold">
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Revenue 30d</dt>
+                <dd className="mono mt-0.5 font-semibold">
                   {formatUsd(active.revenue30d)}
                 </dd>
               </div>
-              <div className="rounded-xl border border-line bg-white/60 p-3">
-                <dt className="text-muted">Last post</dt>
-                <dd className="mono mt-1 font-semibold">
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Last post</dt>
+                <dd className="mono mt-0.5 font-semibold">
                   {active.lastPostAt
                     ? formatRelative(active.lastPostAt)
                     : "—"}
                 </dd>
               </div>
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Rate</dt>
+                <dd className="mt-0.5 font-semibold">{active.rate}</dd>
+              </div>
             </dl>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button tone="signal" onClick={() => nudgeCreator(active.id)}>
-                Slack nudge
-              </Button>
-              <Button
-                onClick={() => advance(active.id, "first_post")}
-                disabled={active.stage === "first_post"}
-              >
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button tone="signal" onClick={() => advance(active.id, "first_post")}>
                 Mark first post
               </Button>
-              <Button
-                tone="ink"
-                onClick={() => advance(active.id, "live")}
-                disabled={active.stage === "live"}
-              >
+              <Button tone="ink" onClick={() => advance(active.id, "live")}>
                 Go live
               </Button>
             </div>
-
-            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+            <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
               Move stage
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {CRM_STAGES.map((s) => (
                 <button
                   key={s.id}
                   type="button"
                   onClick={() => advance(active.id, s.id)}
                   className={cn(
-                    "rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em]",
+                    "rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]",
                     active.stage === s.id
                       ? "border-ink bg-ink text-white"
-                      : "border-line bg-white/70 hover:bg-white",
+                      : "border-line bg-white",
                   )}
                 >
                   {s.label}
                 </button>
               ))}
             </div>
-
-            <div className="mt-5 rounded-xl border border-dashed border-signal/40 bg-signal/5 p-3 text-sm text-ink-soft">
-              <p className="mono mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-signal-deep">
-                Webhook sync
-              </p>
-              Onboarding steps land via HMAC-signed webhooks. Fire a live event from Systems.
-            </div>
-
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-              Activity log
-            </p>
-            <ul className="mt-2 space-y-1.5">
-              {log.map((line, i) => (
-                <li
-                  key={`${line}-${i}`}
-                  className="rounded-lg border border-line bg-white/55 px-2.5 py-1.5 text-xs text-ink-soft"
-                >
-                  {line}
-                </li>
-              ))}
-            </ul>
           </aside>
         )}
       </div>

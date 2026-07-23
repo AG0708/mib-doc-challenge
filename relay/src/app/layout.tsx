@@ -22,9 +22,9 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Relay — Creator Command Center",
+  title: "Relay — Creator Ops",
   description:
-    "Internal ops for recruiting, onboarding, managing, and paying creators — with views tied to installs, web visits, and revenue.",
+    "Production-ready creator command center: outreach, CRM, roster, financials, and HMAC webhooks on a real database.",
 };
 
 export default function RootLayout({

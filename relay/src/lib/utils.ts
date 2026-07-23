@@ -32,3 +32,22 @@ export function formatFollowers(n: number): string {
 export function pct(n: number, digits = 1): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`;
 }
+
+export async function api<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return res.json() as Promise<T>;
+}

@@ -1,260 +1,227 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { activity, competitorPulse, dailyMetrics } from "@/data/seed";
-import { useOps } from "@/lib/ops-store";
-import { useLive } from "@/lib/live-store";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { useMetrics } from "@/lib/api";
 import { formatCompact, formatUsd, pct } from "@/lib/utils";
-import {
-  SectionTitle,
-  StatBlock,
-  Badge,
-  Avatar,
-  Button,
-} from "@/components/ui/primitives";
-import {
-  FunnelChart,
-  RevenueChart,
-  CompetitorBars,
-} from "@/components/charts/Charts";
-import { ConversionRibbon } from "@/components/charts/ConversionRibbon";
-import { LiveTicker } from "@/components/live/LiveTicker";
-import { AnimatePresence, motion } from "framer-motion";
+import { PageHeader, Stat, Badge, Avatar, Button, Empty } from "@/components/ui/primitives";
 
 export default function PulsePage() {
-  const { creators } = useOps();
-  const { events, pulse } = useLive();
-  const [range, setRange] = useState<7 | 30>(30);
+  const [days, setDays] = useState(30);
+  const { data, isLoading, error, mutate } = useMetrics(days);
+  const payload = data?.data;
 
-  const slice = dailyMetrics.slice(-range);
-  const prev = dailyMetrics.slice(-(range * 2), -range);
+  if (error) {
+    return <Empty label="Failed to load metrics from DB. Is the API up?" />;
+  }
 
-  const views = slice.reduce((s, d) => s + d.views, 0);
-  const installs = slice.reduce((s, d) => s + d.installs, 0);
-  const web = slice.reduce((s, d) => s + d.webVisits, 0);
-  const rev = slice.reduce((s, d) => s + d.revenue, 0);
-
-  // subtle live bump so counters feel alive during Loom
-  const liveBump = 1 + Math.min(pulse, 20) * 0.0004;
-  const viewsLive = Math.round(views * liveBump);
-  const installsLive = Math.round(installs * liveBump);
-  const webLive = Math.round(web * liveBump);
-  const revLive = Math.round(rev * liveBump);
-
-  const prevViews = prev.reduce((s, d) => s + d.views, 0) || 1;
-  const prevInstalls = prev.reduce((s, d) => s + d.installs, 0) || 1;
-  const prevWeb = prev.reduce((s, d) => s + d.webVisits, 0) || 1;
-  const prevRev = prev.reduce((s, d) => s + d.revenue, 0) || 1;
-
-  const live = creators.filter((c) => c.stage === "live");
-  const top = [...live].sort((a, b) => b.revenue30d - a.revenue30d).slice(0, 5);
-  const atRisk = creators.filter(
-    (c) => c.standing === "at_risk" || c.standing === "watch",
-  );
-
-  const conv = useMemo(
-    () => ({
-      viewToInstall: (installs / views) * 100,
-      viewToWeb: (web / views) * 100,
-      revPerInstall: rev / installs,
-    }),
-    [installs, views, web, rev],
-  );
+  const totals = payload?.totals;
+  const metrics = payload?.metrics ?? [];
+  const conv = payload?.conversion;
 
   return (
-    <div>
-      <div className="panel grain hero-scan mb-5 overflow-hidden rounded-2xl p-5 md:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="mono text-[11px] font-medium uppercase tracking-[0.18em] text-muted">
-              Pulse · last sync {new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-            </p>
-            <h1 className="display mt-2 text-[2.75rem] leading-[0.92] text-ink md:text-6xl">
-              Creator ops.
-              <span className="block text-signal-deep">Tied to outcomes.</span>
-            </h1>
-            <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-muted">
-              Recruit, onboard, manage, and pay — with every view attributed to
-              app installs, unique web visits, and revenue.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="panel-strong flex rounded-xl p-1">
+    <div className="animate-rise">
+      <PageHeader
+        title="Pulse"
+        description="Attributed creator performance — views, installs, web visits, and revenue from the live database."
+        action={
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-line bg-white p-0.5">
               {[7, 30].map((n) => (
                 <button
                   key={n}
                   type="button"
-                  onClick={() => setRange(n as 7 | 30)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                    range === n ? "bg-ink text-white" : "text-muted"
+                  onClick={() => setDays(n)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                    days === n ? "bg-ink text-white" : "text-muted"
                   }`}
                 >
                   {n}d
                 </button>
               ))}
             </div>
-            <Link href="/systems">
-              <Button tone="ink">See systems</Button>
-            </Link>
+            <Button onClick={() => mutate()}>Refresh</Button>
           </div>
-        </div>
-      </div>
-
-      <LiveTicker />
-      <ConversionRibbon
-        rates={conv}
-        steps={[
-          {
-            key: "views",
-            label: "Views",
-            value: formatCompact(viewsLive),
-            color: "#12c48b",
-          },
-          {
-            key: "installs",
-            label: "Installs",
-            value: formatCompact(installsLive),
-            color: "#ff4f24",
-          },
-          {
-            key: "web",
-            label: "Web visits",
-            value: formatCompact(webLive),
-            color: "#0b1220",
-          },
-          {
-            key: "rev",
-            label: "Revenue",
-            value: formatUsd(revLive),
-            color: "#efb014",
-          },
-        ]}
+        }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatBlock
-          label="Creator views"
-          numericValue={viewsLive}
-          delta={pct(((views - prevViews) / prevViews) * 100)}
-          hint={`vs prior ${range}d`}
-          spark={slice.map((d) => d.views)}
-          delay={40}
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          label="Views"
+          value={isLoading ? "—" : formatCompact(totals?.views ?? 0)}
+          hint={`${days}d window`}
         />
-        <StatBlock
+        <Stat
           label="App installs"
-          numericValue={installsLive}
-          delta={pct(((installs - prevInstalls) / prevInstalls) * 100)}
-          hint="attributed"
-          spark={slice.map((d) => d.installs)}
-          delay={90}
+          value={isLoading ? "—" : formatCompact(totals?.installs ?? 0)}
+          hint={
+            conv ? `${conv.viewToInstall.toFixed(2)}% of views` : undefined
+          }
         />
-        <StatBlock
-          label="Unique web visits"
-          numericValue={webLive}
-          delta={pct(((web - prevWeb) / prevWeb) * 100)}
-          hint="web pivot"
-          spark={slice.map((d) => d.webVisits)}
-          delay={140}
+        <Stat
+          label="Web visits"
+          value={isLoading ? "—" : formatCompact(totals?.webVisits ?? 0)}
+          hint={conv ? `${conv.viewToWeb.toFixed(2)}% of views` : undefined}
         />
-        <StatBlock
-          label="Attributed revenue"
-          numericValue={revLive}
-          valueFormat="usd"
-          delta={pct(((rev - prevRev) / prevRev) * 100)}
-          hint="window"
-          spark={slice.map((d) => d.revenue)}
-          delay={190}
+        <Stat
+          label="Revenue"
+          value={isLoading ? "—" : formatUsd(totals?.revenue ?? 0)}
+          hint={
+            conv ? `${formatUsd(conv.revPerInstall)} / install` : undefined
+          }
         />
       </div>
 
-      <div className="mb-6 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-        <section
-          className="panel animate-rise rounded-2xl p-4 md:p-5"
-          style={{ animationDelay: "220ms" }}
-        >
-          <SectionTitle
-            title="Views → installs"
-            aside={
-              <div className="flex gap-3 text-xs text-muted">
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-signal" /> Views
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-heat" /> Installs
-                </span>
-              </div>
-            }
-          />
-          <FunnelChart data={slice} />
+      <div className="mb-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <section className="card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Views → installs</h2>
+            <div className="flex gap-3 text-xs text-muted">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-signal" /> Views
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-heat" /> Installs
+              </span>
+            </div>
+          </div>
+          <div className="h-[260px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={metrics}>
+                <CartesianGrid stroke="#e5e7eb" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => String(v).slice(5)}
+                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  yAxisId="l"
+                  tickFormatter={(v) => formatCompact(Number(v))}
+                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={40}
+                />
+                <YAxis
+                  yAxisId="r"
+                  orientation="right"
+                  tickFormatter={(v) => formatCompact(Number(v))}
+                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={36}
+                />
+                <Tooltip />
+                <Area
+                  yAxisId="l"
+                  type="monotone"
+                  dataKey="views"
+                  stroke="#059669"
+                  fill="#ecfdf5"
+                  strokeWidth={2}
+                />
+                <Area
+                  yAxisId="r"
+                  type="monotone"
+                  dataKey="installs"
+                  stroke="#dc2626"
+                  fill="#fef2f2"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </section>
 
-        <section
-          className="panel animate-rise rounded-2xl p-4 md:p-5"
-          style={{ animationDelay: "260ms" }}
-        >
-          <SectionTitle title="Live signal stream" />
-          <ul className="space-y-2">
-            <AnimatePresence initial={false}>
-              {events.slice(0, 6).map((item) => (
-                <motion.li
-                  key={item.id}
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-start justify-between gap-3 rounded-xl border border-line bg-white/60 px-3 py-2.5"
-                >
-                  <div>
-                    <Badge
-                      tone={
-                        item.kind === "alert"
-                          ? "heat"
-                          : item.kind === "finance"
-                            ? "amber"
-                            : item.kind === "content"
-                              ? "signal"
-                              : "neutral"
-                      }
-                    >
-                      {item.kind}
-                    </Badge>
-                    <p className="mt-1 text-sm font-medium text-ink">{item.title}</p>
-                  </div>
-                  <span className="mono shrink-0 text-[10px] text-muted">
-                    {new Date(item.at).toLocaleTimeString("en-US", {
-                      hour: "numeric",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
-                  </span>
-                </motion.li>
-              ))}
-            </AnimatePresence>
-          </ul>
+        <section className="card p-4">
+          <h2 className="mb-3 text-sm font-semibold">Revenue</h2>
+          <div className="h-[260px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={metrics}>
+                <CartesianGrid stroke="#e5e7eb" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => String(v).slice(5)}
+                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={(v) => `$${formatCompact(Number(v))}`}
+                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={48}
+                />
+                <Tooltip />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </section>
       </div>
 
-      <div className="mb-6 grid gap-4 xl:grid-cols-[1fr_1fr]">
-        <section className="panel rounded-2xl p-4 md:p-5">
-          <SectionTitle title="Revenue pulse" />
-          <RevenueChart data={slice} />
-        </section>
-        <section className="panel rounded-2xl p-4 md:p-5">
-          <SectionTitle title="Share of voice" />
-          <CompetitorBars rows={competitorPulse} />
-          <ul className="mt-2 space-y-2">
-            {competitorPulse.map((c) => (
-              <li
-                key={c.name}
-                className="flex items-start justify-between gap-3 border-t border-line pt-2 text-sm"
+      <div className="grid gap-4 xl:grid-cols-3">
+        <section className="card p-4 xl:col-span-1">
+          <h2 className="mb-3 text-sm font-semibold">Share of voice</h2>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={payload?.competitors ?? []}
+                layout="vertical"
+                margin={{ left: 8, right: 8 }}
               >
-                <div>
-                  <p className="font-medium text-ink">{c.name}</p>
-                  <p className="text-muted">{c.topHook}</p>
-                </div>
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={100}
+                  tick={{ fontSize: 11, fill: "#374151" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip />
+                <Bar dataKey="shareOfVoice" radius={[0, 6, 6, 0]}>
+                  {(payload?.competitors ?? []).map((c) => (
+                    <Cell
+                      key={c.name}
+                      fill={c.name === "Sherlock" ? "#059669" : "#111827"}
+                      fillOpacity={c.name === "Sherlock" ? 1 : 0.45}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <ul className="mt-2 space-y-2">
+            {(payload?.competitors ?? []).map((c) => (
+              <li key={c.name} className="flex justify-between gap-2 text-sm">
+                <span className="text-muted">{c.topHook}</span>
                 <span
-                  className={`mono shrink-0 font-medium ${
-                    c.weekDelta >= 0 ? "text-signal-deep" : "text-heat"
+                  className={`mono font-medium ${
+                    c.weekDelta >= 0 ? "text-signal" : "text-heat"
                   }`}
                 >
                   {pct(c.weekDelta)}
@@ -263,28 +230,24 @@ export default function PulsePage() {
             ))}
           </ul>
         </section>
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <section className="panel rounded-2xl p-4 md:p-5">
-          <SectionTitle
-            title="Needs attention"
-            aside={
-              <Link href="/roster">
-                <Button size="sm">Open roster</Button>
-              </Link>
-            }
-          />
+        <section className="card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Needs attention</h2>
+            <Link href="/roster" className="text-xs font-medium text-signal">
+              Roster →
+            </Link>
+          </div>
           <div className="space-y-2">
-            {atRisk.slice(0, 4).map((c) => (
+            {(payload?.atRisk ?? []).slice(0, 5).map((c) => (
               <div
                 key={c.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white/60 px-3 py-2.5"
+                className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2"
               >
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 items-center gap-2">
                   <Avatar name={c.name} size="sm" />
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{c.name}</p>
+                    <p className="truncate text-sm font-medium">{c.name}</p>
                     <p className="truncate text-xs text-muted">
                       {c.postsDone}/{c.postsDue} posts · {c.manager}
                     </p>
@@ -298,40 +261,26 @@ export default function PulsePage() {
           </div>
         </section>
 
-        <section className="panel rounded-2xl p-4 md:p-5">
-          <SectionTitle title="Top creators" />
+        <section className="card p-4">
+          <h2 className="mb-3 text-sm font-semibold">Top creators</h2>
           <div className="space-y-2">
-            {top.map((c, i) => (
+            {(payload?.topCreators ?? []).slice(0, 5).map((c, i) => (
               <div
                 key={c.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white/55 px-3 py-2.5"
+                className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="mono w-5 text-xs text-muted">0{i + 1}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="mono w-4 text-xs text-muted">{i + 1}</span>
                   <Avatar name={c.name} size="sm" />
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{c.name}</p>
-                    <p className="truncate text-sm text-muted">{c.handle}</p>
+                    <p className="truncate text-sm font-medium">{c.name}</p>
+                    <p className="truncate text-xs text-muted">{c.handle}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="mono font-semibold">{formatUsd(c.revenue30d)}</p>
-                  <p className="mono text-xs text-muted">
-                    {formatCompact(c.views30d)} views
-                  </p>
-                </div>
+                <p className="mono text-sm font-semibold">
+                  {formatUsd(c.revenue30d)}
+                </p>
               </div>
-            ))}
-          </div>
-          <div className="mt-4 border-t border-line pt-3">
-            <p className="mono mb-2 text-[10px] uppercase tracking-[0.14em] text-muted">
-              Ops diary
-            </p>
-            {activity.slice(0, 2).map((item) => (
-              <p key={item.id} className="mb-1 text-sm text-ink-soft">
-                <span className="font-semibold text-ink">{item.title}. </span>
-                {item.detail}
-              </p>
             ))}
           </div>
         </section>

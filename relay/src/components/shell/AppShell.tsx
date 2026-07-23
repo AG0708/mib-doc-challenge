@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   Radar,
@@ -12,16 +11,14 @@ import {
   Cpu,
   Menu,
   X,
+  Bell,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { LoomTour } from "@/components/loom/LoomTour";
-import { CommandPalette } from "@/components/command/CommandPalette";
-import { ToastStack } from "@/components/ui/ToastStack";
-import { TopBar } from "@/components/shell/TopBar";
-import { OpsProvider } from "@/lib/ops-store";
-import { LiveProvider } from "@/lib/live-store";
-import { Avatar } from "@/components/ui/primitives";
+import { ToastProvider } from "@/components/ui/ToastProvider";
+import { useActivity } from "@/lib/api";
+import { formatRelative } from "@/lib/time";
+import { Avatar, Badge } from "@/components/ui/primitives";
 import { CURRENT_USER } from "@/data/types";
 
 const NAV = [
@@ -36,111 +33,125 @@ const NAV = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [inbox, setInbox] = useState(false);
+  const { data } = useActivity();
+  const feed = data?.data.activity ?? [];
 
   return (
-    <OpsProvider>
-      <LiveProvider>
-        <div className="relative z-10 mx-auto flex min-h-screen max-w-[1480px] flex-col px-4 pb-28 pt-4 md:px-6 lg:flex-row lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
-          <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-md border border-line bg-panel-strong px-3 py-2 text-sm font-medium"
-              onClick={() => setOpen((v) => !v)}
-              aria-label="Toggle navigation"
-            >
-              {open ? <X size={16} /> : <Menu size={16} />}
-              Menu
-            </button>
-            <CommandPalette />
-          </div>
-
-          <aside
-            className={cn(
-              "panel grain mb-4 flex w-full shrink-0 flex-col rounded-2xl p-4 lg:mb-0 lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-[15.5rem] lg:p-5",
-              open ? "block" : "hidden lg:flex",
-            )}
-          >
-            <Link href="/" className="mb-6 block" onClick={() => setOpen(false)}>
-              <div className="flex items-center gap-3">
-                <span className="relative grid h-10 w-10 place-items-center overflow-hidden rounded-xl bg-ink text-white">
-                  <span className="display text-lg leading-none">R</span>
-                  <span className="absolute inset-x-0 bottom-0 h-1 bg-signal" />
-                </span>
-                <div>
-                  <div className="display text-[1.85rem] leading-none tracking-tight text-ink">
-                    Relay
-                  </div>
-                  <p className="mt-1 text-[12px] leading-snug text-muted">
-                    Internal ops
-                  </p>
-                </div>
+    <ToastProvider>
+      <div className="flex min-h-screen">
+        <aside
+          className={cn(
+            "fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-sidebar text-white lg:static",
+            open ? "flex" : "hidden lg:flex",
+          )}
+        >
+          <div className="border-b border-white/10 px-4 py-4">
+            <Link href="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-signal text-sm font-bold">
+                R
+              </span>
+              <div>
+                <p className="display text-xl leading-none">Relay</p>
+                <p className="mt-0.5 text-[11px] text-sidebar-muted">Creator ops</p>
               </div>
             </Link>
-
-            <div className="mb-4 hidden lg:block">
-              <CommandPalette />
-            </div>
-
-            <nav className="flex flex-col gap-1">
-              {NAV.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                      active
-                        ? "text-ink"
-                        : "text-muted hover:bg-white/55 hover:text-ink",
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="nav-pill"
-                        className="absolute inset-0 rounded-xl bg-white shadow-[inset_0_0_0_1px_rgba(11,18,32,0.08)]"
-                        transition={{
-                          type: "spring",
-                          stiffness: 380,
-                          damping: 32,
-                        }}
-                      />
-                    )}
-                    <Icon size={16} className="relative z-10" />
-                    <span className="relative z-10">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className="mt-auto hidden pt-8 lg:block">
-              <div className="rounded-xl border border-line bg-white/70 p-3">
-                <div className="flex items-center gap-2">
-                  <Avatar name={CURRENT_USER.name} size="sm" />
-                  <div>
-                    <p className="text-sm font-semibold leading-tight">
-                      {CURRENT_USER.name}
-                    </p>
-                    <p className="text-[11px] text-muted">{CURRENT_USER.role}</p>
-                  </div>
-                </div>
+          </div>
+          <nav className="flex flex-1 flex-col gap-0.5 p-2">
+            {NAV.map((item) => {
+              const active =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname.startsWith(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition",
+                    active
+                      ? "bg-white/10 text-white"
+                      : "text-sidebar-muted hover:bg-white/5 hover:text-white",
+                  )}
+                >
+                  <Icon size={16} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="border-t border-white/10 p-3">
+            <div className="flex items-center gap-2 rounded-lg bg-white/5 px-2 py-2">
+              <Avatar name={CURRENT_USER.name} size="sm" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{CURRENT_USER.name}</p>
+                <p className="truncate text-[11px] text-sidebar-muted">
+                  {CURRENT_USER.role}
+                </p>
               </div>
             </div>
-          </aside>
+          </div>
+        </aside>
 
-          <main className="min-w-0 flex-1">
-            <TopBar />
-            {children}
-          </main>
-          <LoomTour />
-          <ToastStack />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line bg-white/90 px-4 py-2.5 backdrop-blur md:px-6">
+            <button
+              type="button"
+              className="rounded-lg border border-line px-2.5 py-1.5 text-sm lg:hidden"
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? <X size={16} /> : <Menu size={16} />}
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-signal-soft px-2 py-1 text-[11px] font-semibold text-signal">
+                <span className="live-dot h-1.5 w-1.5 rounded-full bg-signal" />
+                Live DB
+              </span>
+              <span className="hidden text-xs text-muted sm:inline">
+                SQLite · /api · webhook-ready
+              </span>
+            </div>
+            <div className="relative ml-auto">
+              <button
+                type="button"
+                onClick={() => setInbox((v) => !v)}
+                className="relative rounded-lg border border-line bg-white p-2"
+              >
+                <Bell size={16} />
+                {feed.length > 0 && (
+                  <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-heat px-1 text-[10px] font-bold text-white">
+                    {Math.min(feed.length, 9)}
+                  </span>
+                )}
+              </button>
+              {inbox && (
+                <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-white shadow-lg">
+                  <div className="border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+                    Activity
+                  </div>
+                  <ul className="max-h-80 overflow-auto">
+                    {feed.slice(0, 12).map((item) => (
+                      <li key={item.id} className="border-b border-line px-3 py-2.5 last:border-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge>{item.kind}</Badge>
+                          <span className="mono text-[10px] text-muted">
+                            {formatRelative(item.at)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm font-medium">{item.title}</p>
+                        <p className="text-xs text-muted">{item.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </header>
+          <main className="flex-1 px-4 py-5 md:px-6 md:py-6">{children}</main>
         </div>
-      </LiveProvider>
-    </OpsProvider>
+      </div>
+    </ToastProvider>
   );
 }

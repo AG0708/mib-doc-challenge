@@ -1,11 +1,17 @@
-# Relay — Sherlock Internal Tools Loom demo
+# Relay — Creator Ops (Sherlock-ready)
 
-Built specifically for the **Sherlock Engineering Hire (Internal Tools)** application Loom: walk through **approach → product → process** in 3–5 minutes.
+Internal command center for creator outreach, CRM, roster, financials, and attribution.
 
-**Stack:** Next.js · React · TypeScript · Tailwind · Recharts · Framer Motion  
-Seed data mirrors Supabase-shaped tables (no keys required).
+**This is a real app:** SQLite database + REST APIs + HMAC webhooks. Same schema ships as a Supabase migration so Sherlock can adopt it.
 
-## Record in 60 seconds
+## Stack
+
+- Next.js · React · TypeScript · Tailwind · Recharts · SWR
+- **Drizzle ORM + SQLite** (local durable DB at `data/relay.db`)
+- **Supabase Postgres schema** in `supabase/migrations/001_init.sql`
+- HMAC webhook ingress at `POST /api/webhooks/onboarding`
+
+## Run
 
 ```bash
 cd relay
@@ -13,31 +19,36 @@ npm install
 npm run dev
 ```
 
-1. Open [http://localhost:3000](http://localhost:3000)
-2. Keep the **Loom teleprompter** visible (bottom-right) — it tells you what to say/do per beat
-3. Follow **[LOOM.md](./LOOM.md)** (minute-by-minute script)
-4. End on **Systems** (entities, HMAC webhook, week-one ships)
+Open http://localhost:3000
 
-Email the Loom to `admin@imsherlock.com`.
+First boot creates and seeds `data/relay.db`.
 
-## Routes (video path)
+## API surface
 
-| Order | Route | Beat |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| 1 | `/` Pulse | Problem + views→installs→web→revenue |
-| 2 | `/outreach` | Funnel ownership, live stage move |
-| 3 | `/crm` | Onboarding pipeline + webhook callout |
-| 4 | `/roster` | Cadence / standing |
-| 5 | `/financials` | Payroll + attribution |
-| 6 | `/systems` | **Process close** — model, contracts, week-one |
+| GET/PATCH/POST | `/api/prospects` | Outreach CRM |
+| GET/PATCH | `/api/creators` | Creator pipeline / roster |
+| GET/PATCH | `/api/payouts` | Payroll ledger |
+| GET | `/api/metrics` | Pulse totals + charts |
+| GET | `/api/activity` | Activity + webhook inbox |
+| POST | `/api/webhooks/onboarding` | HMAC-signed onboarding events |
 
-## Hire signals this demo is built to hit
+## Hand off to Sherlock / Supabase
 
-- **Beige-shaped domains** — outreach, CRM, roster, financials, intel  
-- **Backend-first** — Systems page shows entities, HMAC onboarding webhook, attribution sketch  
-- **AI-native process** — teleprompter + LOOM.md narrate how it was scoped and shipped  
-- **High agency** — concrete week-one ships on their stack (Supabase, RevenueCat, Slack cron)
+1. Run `supabase/migrations/001_init.sql` in your Supabase project.
+2. Set `RELAY_WEBHOOK_SECRET` (defaults to `relay_dev_secret` in local).
+3. Point web onboarding at `/api/webhooks/onboarding` with `X-Relay-Signature: sha256=<hmac>`.
+4. Swap the Drizzle SQLite driver for `drizzle-orm/postgres-js` (or Supabase client) using the same table shapes.
+5. Replace seed metrics with RevenueCat + PostHog joins into `daily_metrics`.
 
-## What production would add
+## Loom (application video)
 
-Supabase Auth/RLS · Realtime stage updates · RevenueCat/PostHog joins · Slack bot fleet config · idempotent webhook inbox
+See `LOOM.md`. Product UI is ops-first; open Systems and fire a signed webhook on camera.
+
+## Env
+
+```bash
+RELAY_WEBHOOK_SECRET=relay_dev_secret
+RELAY_DB_PATH=./data/relay.db   # optional
+```

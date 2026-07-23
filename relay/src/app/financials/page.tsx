@@ -1,19 +1,30 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { dailyMetrics } from "@/data/seed";
-import { useOps } from "@/lib/ops-store";
-import { formatCompact, formatUsd, cn } from "@/lib/utils";
+import { mutate as globalMutate } from "swr";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { useCreators, useMetrics, usePayouts } from "@/lib/api";
+import { api, cn, formatCompact, formatUsd } from "@/lib/utils";
 import { formatRelative } from "@/lib/time";
+import { useToast } from "@/components/ui/ToastProvider";
 import {
   PageHeader,
-  SectionTitle,
   Badge,
-  StatBlock,
   Button,
+  Stat,
   Avatar,
+  Empty,
 } from "@/components/ui/primitives";
-import { AttributionBars, RevenueChart } from "@/components/charts/Charts";
 
 const STATUS_TONE = {
   paid: "signal" as const,
@@ -23,155 +34,201 @@ const STATUS_TONE = {
 };
 
 export default function FinancialsPage() {
-  const { creators, payouts, setPayoutStatus } = useOps();
+  const { push } = useToast();
   const [status, setStatus] = useState("all");
-
-  const queue = useMemo(
-    () =>
-      payouts.filter((p) => (status === "all" ? true : p.status === status)),
-    [status, payouts],
+  const { data, isLoading, mutate } = usePayouts(
+    status === "all" ? "" : `?status=${status}`,
   );
+  const { data: metricsData } = useMetrics(30);
+  const { data: creatorsData } = useCreators("");
+  const rows = data?.data ?? [];
+  const allPayouts = usePayouts("").data?.data ?? [];
 
-  const payrollDue = payouts
+  const payrollDue = allPayouts
     .filter((p) => p.status === "queued" || p.status === "processing")
     .reduce((s, p) => s + p.amount, 0);
-  const paid = payouts
+  const paid = allPayouts
     .filter((p) => p.status === "paid")
     .reduce((s, p) => s + p.amount, 0);
-  const held = payouts
+  const held = allPayouts
     .filter((p) => p.status === "hold")
     .reduce((s, p) => s + p.amount, 0);
-  const rev30 = dailyMetrics.reduce((s, d) => s + d.revenue, 0);
 
-  const attribution = [...creators]
-    .filter((c) => c.stage === "live")
-    .sort((a, b) => b.revenue30d - a.revenue30d)
-    .slice(0, 6)
-    .map((c) => ({
-      name: c.name.split(" ")[0],
-      installs: c.installs30d,
-      webVisits: c.webVisits30d,
-      revenue: c.revenue30d,
-    }));
+  const attribution = useMemo(
+    () =>
+      [...(creatorsData?.data ?? [])]
+        .filter((c) => c.stage === "live")
+        .sort((a, b) => b.revenue30d - a.revenue30d)
+        .slice(0, 6)
+        .map((c) => ({
+          name: c.name.split(" ")[0],
+          installs: c.installs30d,
+          webVisits: c.webVisits30d,
+        })),
+    [creatorsData],
+  );
 
-  function approveBatch() {
-    payouts
-      .filter((p) => p.status === "queued")
-      .forEach((p) => setPayoutStatus(p.id, "processing"));
+  async function setStatusFor(ids: string[], next: string) {
+    await api("/api/payouts", {
+      method: "PATCH",
+      body: JSON.stringify({ ids, status: next }),
+    });
+    await mutate();
+    await globalMutate("/api/payouts");
+    await globalMutate("/api/activity");
+    push({ title: `Payouts → ${next}`, detail: `${ids.length} row(s)`, tone: "ok" });
   }
 
   return (
-    <div>
+    <div className="animate-rise">
       <PageHeader
-        eyebrow="Money · Financials"
-        title="Payroll meets attribution."
-        description="What creators are owed, what content converted, and what is held for review."
+        title="Financials"
+        description="Payroll ledger and attribution charts — every status change is persisted."
         action={
-          <Button tone="ink" onClick={approveBatch}>
+          <Button
+            tone="ink"
+            onClick={() =>
+              setStatusFor(
+                allPayouts.filter((p) => p.status === "queued").map((p) => p.id),
+                "processing",
+              )
+            }
+          >
             Process queued batch
           </Button>
         }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatBlock
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
           label="Revenue 30d"
-          value={formatUsd(rev30)}
-          hint="attributed"
-          spark={dailyMetrics.slice(-12).map((d) => d.revenue)}
+          value={formatUsd(metricsData?.data.totals.revenue ?? 0)}
         />
-        <StatBlock label="Payroll queued" value={formatUsd(payrollDue)} hint="next batch" />
-        <StatBlock label="Paid this cycle" value={formatUsd(paid)} delta="cleared" />
-        <StatBlock label="On hold" value={formatUsd(held)} hint="policy review" />
+        <Stat label="Payroll queued" value={formatUsd(payrollDue)} />
+        <Stat label="Paid this cycle" value={formatUsd(paid)} />
+        <Stat label="On hold" value={formatUsd(held)} />
       </div>
 
-      <div className="mb-6 grid gap-4 xl:grid-cols-2">
-        <section className="panel rounded-2xl p-4 md:p-5">
-          <SectionTitle
-            title="Creator attribution"
-            aside={
-              <span className="text-xs text-muted">installs vs web visits</span>
-            }
-          />
-          <AttributionBars rows={attribution} />
+      <div className="mb-4 grid gap-4 xl:grid-cols-2">
+        <section className="card p-4">
+          <h2 className="mb-3 text-sm font-semibold">Creator attribution</h2>
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={attribution}>
+                <CartesianGrid stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => formatCompact(Number(v))} width={40} />
+                <Tooltip />
+                <Bar dataKey="installs" fill="#059669" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="webVisits" fill="#111827" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </section>
-        <section className="panel rounded-2xl p-4 md:p-5">
-          <SectionTitle title="Daily revenue" />
-          <RevenueChart data={dailyMetrics} />
+        <section className="card p-4">
+          <h2 className="mb-3 text-sm font-semibold">Daily revenue</h2>
+          <div className="h-[240px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={metricsData?.data.metrics ?? []}>
+                <CartesianGrid stroke="#e5e7eb" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(v) => String(v).slice(5)}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis
+                  tickFormatter={(v) => `$${formatCompact(Number(v))}`}
+                  width={48}
+                />
+                <Tooltip />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="#111827"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </section>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <SectionTitle title="Payout ledger" />
-        <div className="flex flex-wrap gap-1.5">
-          {["all", "queued", "processing", "paid", "hold"].map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatus(s)}
-              className={cn(
-                "rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em]",
-                status === s
-                  ? "border-ink bg-ink text-white"
-                  : "border-line bg-white/70",
-              )}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {["all", "queued", "processing", "paid", "hold"].map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStatus(s)}
+            className={cn(
+              "rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]",
+              status === s ? "border-ink bg-ink text-white" : "border-line bg-white",
+            )}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
-      <div className="panel overflow-hidden rounded-2xl">
+      {isLoading && <Empty label="Loading payouts…" />}
+
+      <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] text-left text-sm">
-            <thead className="border-b border-line bg-white/50 text-[11px] uppercase tracking-[0.12em] text-muted">
+          <table className="w-full min-w-[800px] text-left text-sm">
+            <thead className="border-b border-line bg-bg text-[11px] uppercase tracking-[0.1em] text-muted">
               <tr>
-                <th className="px-4 py-3 font-medium">Creator</th>
-                <th className="px-4 py-3 font-medium">Period</th>
-                <th className="px-4 py-3 font-medium">Views</th>
-                <th className="px-4 py-3 font-medium">Amount</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Updated</th>
-                <th className="px-4 py-3 font-medium">Actions</th>
+                <th className="px-3 py-2.5 font-medium">Creator</th>
+                <th className="px-3 py-2.5 font-medium">Period</th>
+                <th className="px-3 py-2.5 font-medium">Views</th>
+                <th className="px-3 py-2.5 font-medium">Amount</th>
+                <th className="px-3 py-2.5 font-medium">Status</th>
+                <th className="px-3 py-2.5 font-medium">Updated</th>
+                <th className="px-3 py-2.5 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {queue.map((p) => (
-                <tr key={p.id} className="border-b border-line/70">
-                  <td className="px-4 py-3">
+              {rows.map((p) => (
+                <tr key={p.id} className="border-b border-line">
+                  <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <Avatar name={p.creatorName} size="sm" />
                       <span className="font-medium">{p.creatorName}</span>
                     </div>
                   </td>
-                  <td className="mono px-4 py-3 text-muted">{p.period}</td>
-                  <td className="mono px-4 py-3">{formatCompact(p.views)}</td>
-                  <td className="mono px-4 py-3 font-semibold">
+                  <td className="mono px-3 py-2.5 text-muted">{p.period}</td>
+                  <td className="mono px-3 py-2.5">{formatCompact(p.views)}</td>
+                  <td className="mono px-3 py-2.5 font-semibold">
                     {formatUsd(p.amount)}
                   </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={STATUS_TONE[p.status]}>{p.status}</Badge>
+                  <td className="px-3 py-2.5">
+                    <Badge
+                      tone={
+                        STATUS_TONE[p.status as keyof typeof STATUS_TONE] ??
+                        "neutral"
+                      }
+                    >
+                      {p.status}
+                    </Badge>
                   </td>
-                  <td className="mono px-4 py-3 text-muted">
+                  <td className="mono px-3 py-2.5 text-muted">
                     {formatRelative(p.updatedAt)}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
+                  <td className="px-3 py-2.5">
+                    <div className="flex flex-wrap gap-1">
                       {p.status !== "paid" && (
                         <Button
                           size="sm"
                           tone="signal"
-                          onClick={() => setPayoutStatus(p.id, "paid")}
+                          onClick={() => setStatusFor([p.id], "paid")}
                         >
-                          Mark paid
+                          Paid
                         </Button>
                       )}
                       {p.status !== "hold" && p.status !== "paid" && (
                         <Button
                           size="sm"
                           tone="heat"
-                          onClick={() => setPayoutStatus(p.id, "hold")}
+                          onClick={() => setStatusFor([p.id], "hold")}
                         >
                           Hold
                         </Button>
@@ -179,7 +236,7 @@ export default function FinancialsPage() {
                       {p.status === "hold" && (
                         <Button
                           size="sm"
-                          onClick={() => setPayoutStatus(p.id, "queued")}
+                          onClick={() => setStatusFor([p.id], "queued")}
                         >
                           Release
                         </Button>
