@@ -88,9 +88,9 @@ USEFUL_MARKERS = (
 
 # Loose keep-pattern for embedded-image OCR that RapidOCR mangles heavily.
 _OCR_KEEP_RE = re.compile(
-    r"MIB-\d{6}|SPN-?\d{4}|Observed|Fee|paid|waiv|flag|Finding|DENIED|APPROVED|"
+    r"MIB-\d{6}|SPN-?\d{4}|Observed|Fee|paid|waiv|unpaid|flag|Finding|DENIED|APPROVED|"
     r"FORM\s*B-?\d{1,2}|Biomot|Biometric|Blometric|Adjudicat|Scan\s*Slip|Sean\s*a|"
-    r"B-1[123]|embargo|biohazard|warrant|tamper",
+    r"B-1[123]|embargo|biohazard|warrant|tamper|Reason|DIP-WAIVER|earved|carved",
     re.I,
 )
 
@@ -293,11 +293,44 @@ def _ocr_tesseract(img: np.ndarray, *, upscale: bool = True, psm: int = 6) -> st
 
 _FEE_HEADER_RE = re.compile(
     r"MIB\s*Fe[eo]?\s*R[aeo]c[aeoi]?[il]?pt|"
-    r"Fee\s*Status|Waiver\s*Code|Amount\b|"
+    r"Fee\s*St|Waiver\s*Code|Amount\b|"
     r"\[FEE STATUS OBSCURED\]|DIP-WAIVER|"
-    r"\b(?:unpaid|paid|waived|unknown)\b",
+    r"\b(?:unpaid|paid|waived|unknown|earved|carved|sarved|wored|wateu|wabved|warved)\b",
     re.I,
 )
+
+_NOTE_HEADER_RE = re.compile(
+    r"Manual\s*Adjudicat|Adjudicator\s*Note|Finding|"
+    r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee|"
+    r"Reason\s*:",
+    re.I,
+)
+
+# Broader than historical St[a-z]*u[sae]* — OCR yields "Fee Stave" / "Fee Statusr" /
+# "fee State" / glued "status:waived" without the canonical "Status" spelling.
+_FEE_STATUS_VALUE_RE = re.compile(
+    r"Fe[eo]?\s*St[a-z]*\s*[:.]?\s*"
+    r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|"
+    r"paid|pald|pold|pod|pad|naid|"
+    r"waived|waved|walved|warved|wabved|earved|carved|sarved|eared|wored|wateu|usived|wslved|"
+    r"unknown)"
+    r"|(?:Fee\s*)?Status\s*[:.]?\s*"
+    r"(unpaid|unpald|unpold|unpaic|urpald|upold|paid|pald|pold|"
+    r"waived|waved|walved|warved|wabved|earved|carved|sarved|wored|wateu|unknown)\b"
+    r"|\$809\.00|\bDIP-WAIVER\b"
+    r"|(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee",
+    re.I,
+)
+
+
+def _has_fee_signal(text: str) -> bool:
+    """True when OCR text carries an actionable fee token (status / waiver / $809)."""
+    return bool(_FEE_STATUS_VALUE_RE.search(text or ""))
+
+
+def _has_fee_value(text: str) -> bool:
+    """Backward-compatible alias used by page-render merge logic."""
+    return _has_fee_signal(text)
 
 
 def _ocr_fee_header(img: np.ndarray) -> str:
@@ -311,18 +344,82 @@ def _ocr_fee_header(img: np.ndarray) -> str:
     h, w = img.shape[:2]
     if h < 350 or w < 350:
         return ""
-    crop = img[: max(260, int(h * 0.24)), : max(420, int(w * 0.58))]
+    # Slightly taller/wider than before — Fee Status / Waiver Code often sit
+    # just below the title and were clipped on tight 24% crops.
+    crop = img[: max(300, int(h * 0.30)), : max(520, int(w * 0.68))]
+    variants: list[np.ndarray] = []
     if cv2 is not None:
-        crop = cv2.resize(crop, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
-    psms = (6,) if os.environ.get("MIB_TESS_FAST", "").strip() in {"1", "true", "yes"} else (6, 11)
-    for psm in psms:
+        up = cv2.resize(crop, None, fx=2.4, fy=2.4, interpolation=cv2.INTER_CUBIC)
+        variants.append(up)
+        # CLAHE on grayscale helps thin anti-aliased receipt glyphs.
         try:
-            text = _normalize_ocr_spacing(_ocr_tesseract(crop, upscale=False, psm=psm))
+            gray = cv2.cvtColor(up, cv2.COLOR_RGB2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            variants.append(cv2.cvtColor(clahe.apply(gray), cv2.COLOR_GRAY2RGB))
+        except Exception:
+            pass
+    else:
+        variants.append(crop)
+    psms = (6,) if os.environ.get("MIB_TESS_FAST", "").strip() in {"1", "true", "yes"} else (6, 11)
+    best = ""
+    for variant in variants:
+        for psm in psms:
+            try:
+                text = _normalize_ocr_spacing(_ocr_tesseract(variant, upscale=False, psm=psm))
+            except Exception:
+                continue
+            if not text:
+                continue
+            if _FEE_HEADER_RE.search(text):
+                if _has_fee_signal(text):
+                    return text
+                if len(text) > len(best):
+                    best = text
+    return best
+
+
+def _ocr_note_header(img: np.ndarray) -> str:
+    """Cheap top-band OCR for Manual Adjudicator Note fee-unpaid lines.
+
+    Some unpaid truths live only on image-only note pages ("Reason: … fee unpaid")
+    that RapidOCR reduces to SAMPLE DENIAL / INTAKE stamps.
+    """
+    h, w = img.shape[:2]
+    if h < 350 or w < 350:
+        return ""
+    crop = img[: max(320, int(h * 0.36)), : max(560, int(w * 0.75))]
+    variants: list[np.ndarray] = []
+    if cv2 is not None:
+        up = cv2.resize(crop, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
+        variants.append(up)
+        try:
+            gray = cv2.cvtColor(up, cv2.COLOR_RGB2GRAY)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            variants.append(cv2.cvtColor(clahe.apply(gray), cv2.COLOR_GRAY2RGB))
+            _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            inv = bw if bw.mean() > 127 else 255 - bw
+            thick = 255 - cv2.dilate(255 - inv, np.ones((2, 2), np.uint8), iterations=1)
+            variants.append(cv2.cvtColor(thick, cv2.COLOR_GRAY2RGB))
+        except Exception:
+            pass
+    else:
+        variants.append(crop)
+    best = ""
+    for variant in variants:
+        try:
+            text = _normalize_ocr_spacing(_ocr_tesseract(variant, upscale=False, psm=6))
         except Exception:
             continue
-        if _FEE_HEADER_RE.search(text or ""):
-            return text
-    return ""
+        if not text:
+            continue
+        if _NOTE_HEADER_RE.search(text) or re.search(
+            r"fee\s+\w{0,8}unpaid|unpaid|DENIED|Finding", text, re.I
+        ):
+            if re.search(r"unpaid|fee\s+\w{0,8}unp|Finding|DENIED|Adjudicat", text, re.I):
+                return text
+            if len(text) > len(best):
+                best = text
+    return best
 
 
 def _ocr_numpy(img: np.ndarray) -> str:
@@ -350,16 +447,7 @@ def _ocr_numpy(img: np.ndarray) -> str:
             re.I,
         )
     )
-    has_fee_value = bool(
-        re.search(
-            r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
-            r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|"
-            r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)"
-            r"|\$809\.00|\bDIP-WAIVER\b",
-            rapid,
-            re.I,
-        )
-    )
+    has_fee_value = _has_fee_signal(rapid)
     looks_b13_note = bool(
         re.search(
             r"FORM\s*B-?\d{1,2}|Blometric|Biometric|Biomot|Adjudicator|Finding|"
@@ -382,6 +470,26 @@ def _ocr_numpy(img: np.ndarray) -> str:
     # Full-page packet scans often OCR as sparse garbage with no form header;
     # still try tess when Rapid text is thin but the raster is large.
     sparse_rapid = len(re.sub(r"\s+", "", rapid or "")) < 40
+    # Image-only fee/note pages: Rapid keeps title stamps but drops the value
+    # line. Always try the cheap header crop (even under MIB_TESS_FAST).
+    if looks_fee and not has_fee_value:
+        fee_hdr = _ocr_fee_header(img)
+        if fee_hdr:
+            rapid = (rapid + "\n" + fee_hdr).strip() if rapid else fee_hdr
+            has_fee_value = _has_fee_signal(rapid)
+    if sparse_rapid and not looks_fee and img.shape[0] >= 800 and img.shape[1] >= 600:
+        # Sparse trap raster — may be a note with "fee unpaid" or a fee page
+        # that Rapid failed to title-detect. Try both cheap header crops.
+        fee_hdr = _ocr_fee_header(img)
+        if fee_hdr:
+            rapid = (rapid + "\n" + fee_hdr).strip() if rapid else fee_hdr
+            has_fee_value = _has_fee_signal(rapid)
+            looks_fee = True
+        elif not re.search(r"Finding|fee\s+unpaid|Adjudicat", rapid or "", re.I):
+            note_hdr = _ocr_note_header(img)
+            if note_hdr:
+                rapid = (rapid + "\n" + note_hdr).strip() if rapid else note_hdr
+                looks_b13_note = True
     needs_tess = (
         (looks_b13_note and not has_flag_line)
         or (looks_fee and not has_fee_value)
@@ -462,8 +570,22 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"MIB Fee Racelpt", "MIB Fee Receipt"),
         (r"MIB Feo Receipt", "MIB Fee Receipt"),
         (r"MIB Feo Rocoipt", "MIB Fee Receipt"),
+        (r"MIB Foe Recoipt", "MIB Fee Receipt"),
+        (r"MIB Foo Recaipt", "MIB Fee Receipt"),
+        (r"MIB Foo Receipt", "MIB Fee Receipt"),
         (r"MIB Fse Receipt", "MIB Fee Receipt"),
         (r"MIBFee Receipt", "MIB Fee Receipt"),
+        # OCR drops "Fee" and leaves bare "Status: paid/waived/unpaid" on receipts.
+        # Do NOT match when already prefixed (Fee Status / Registry Status / etc.).
+        (r"(?m)^Status\s*:\s*(paid|pald|pold|waived|waved|unpaid|unpald|unknown)\b",
+         r"Fee Status: \1"),
+        (r"(?<![A-Za-z])(?<!Fee\s)(?<!Registry\s)Status\s*:\s*(paid|pald|pold|waived|waved|unpaid|unpald|unknown)\b",
+         r"Fee Status: \1"),
+        # Observed flags OCR: nene/nane/nome → none
+        (r"(Observed\s*flags?\s*:?\s*)nene\b", r"\1none"),
+        (r"(Observed\s*flaga?\s*:?\s*)nene\b", r"\1none"),
+        (r"(Observed\s*flags?\s*:?\s*)nane\b", r"\1none"),
+        (r"(Observed\s*flags?\s*:?\s*)nome\b", r"\1none"),
         (r"\bWalver Code\b", "Waiver Code"),
         (r"\bWaiverC0de\b", "Waiver Code"),
         (r"\bD1P[\s\-]*WAIVER\b", "DIP-WAIVER"),
@@ -486,8 +608,23 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"Fee Stabus", "Fee Status"),
         (r"Fee Stabuac", "Fee Status"),
         (r"Feo Stabus", "Fee Status"),
+        (r"Fee Statusr", "Fee Status"),
+        (r"Fee Stave", "Fee Status"),
+        (r"Fee State", "Fee Status"),
+        (r"fee State", "Fee Status"),
+        (r"Foo Status", "Fee Status"),
         (r"Fee Stus:", "Fee Status: "),
         (r"Fee Stius:", "Fee Status: "),
+        # Common waived morphs after Fee Status (below fuzzy threshold alone).
+        (r"(Fee\s*Status\s*[:.]?\s*)(?:earved|carved|sarved|eared|wored|wateu|usived|unived|waveu|wadeu|watecu)\b",
+         r"\1waived"),
+        (r"(?<![A-Za-z])(?:earved|carved|sarved|waveu|wadeu|wateu|watecu)\b", "waived"),
+        # Glued OCR: "SSuauswaveu" / "rtauswadeu" / "siaus wateu" on fee receipts.
+        (r"(?i)(?:staus|siaus|suaus|rtaus|rsiaus|rediaus)[a-z]*?(waveu|wadeu|wateu|watecu|waived)",
+         "Fee Status: waived"),
+        (r"(?i)\bwatecu\b", "waived"),
+        (r"(?i)\bwaveu\b", "waived"),
+        (r"(?i)\bwadeu\b", "waived"),
         (r"Observedflags:", "Observed flags: "),
         (r"ObserObserved flags:", "Observed flags: "),
         (r"ObseIvedfes:", "Observed flags: "),
@@ -574,23 +711,15 @@ def _ocr_page_render(page: fitz.Page, dpi: int = 120) -> str:
     pix = page.get_pixmap(dpi=dpi, alpha=False)
     arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, 3)
     text = _normalize_ocr_spacing(_ocr_numpy(arr))
-    if not _has_fee_value(text):
+    if not _has_fee_signal(text):
         fee_header = _ocr_fee_header(arr)
         if fee_header and fee_header not in text:
             text = (text + "\n" + fee_header).strip() if text else fee_header
+    if not re.search(r"Finding|fee\s+unpaid|Adjudicat", text or "", re.I):
+        note_header = _ocr_note_header(arr)
+        if note_header and note_header not in text:
+            text = (text + "\n" + note_header).strip() if text else note_header
     return text
-
-
-def _has_fee_value(text: str) -> bool:
-    return bool(
-        re.search(
-            r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
-            r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|"
-            r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)",
-            text,
-            re.I,
-        )
-    )
 
 
 def _preserve_system_keys(original: str, replacement: str) -> str:
@@ -640,7 +769,17 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                     ocr_text = _ocr_embedded_images(doc, page)
                 except Exception:
                     ocr_text = ""
-                if not ocr_text or not any(m in ocr_text for m in USEFUL_MARKERS):
+                # Fee title without a value: still merge page-render / header OCR.
+                # Previously USEFUL_MARKERS short-circuited after "MIB Fee Receipt"
+                # and dropped Fee Status / DIP-WAIVER recovered only on render.
+                fee_like_no_value = bool(
+                    re.search(r"MIB\s*Fe|Fee\s*R|Waiver\s*Code|Fee\s*St", ocr_text or "", re.I)
+                ) and not _has_fee_signal(ocr_text or "")
+                if (
+                    not ocr_text
+                    or not any(m in ocr_text for m in USEFUL_MARKERS)
+                    or fee_like_no_value
+                ):
                     try:
                         if any(True for info in page.get_images(full=True) if info[2] >= 400 and info[3] >= 400):
                             rendered = _ocr_page_render(page, dpi=ocr_dpi)
@@ -648,13 +787,18 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                                 any(m in rendered for m in USEFUL_MARKERS)
                                 or _OCR_KEEP_RE.search(rendered or "")
                                 or re.search(
-                                    r"Fee|paid|waiv|Observed|SPN|Home World|Visa|Finding|DENIED|"
-                                    r"B-1[123]|Biomot|Adjudicat",
+                                    r"Fee|paid|waiv|unpaid|Observed|SPN|Home World|Visa|Finding|DENIED|"
+                                    r"B-1[123]|Biomot|Adjudicat|Reason|DIP-WAIVER",
                                     rendered,
                                     re.I,
                                 )
                             ):
-                                ocr_text = rendered if len(rendered) >= len(ocr_text) else ocr_text
+                                if fee_like_no_value and rendered:
+                                    # Merge complementary tokens rather than length-pick.
+                                    if rendered not in ocr_text:
+                                        ocr_text = (ocr_text + "\n" + rendered).strip()
+                                else:
+                                    ocr_text = rendered if len(rendered) >= len(ocr_text) else ocr_text
                     except Exception:
                         pass
                 if ocr_text:

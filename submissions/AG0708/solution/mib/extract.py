@@ -63,6 +63,21 @@ FEE_TOKEN_MAP = {
     "waved": "waived",
     "walved": "waived",
     "waivod": "waived",
+    "warved": "waived",
+    "wabved": "waived",
+    "wslved": "waived",
+    "earved": "waived",
+    "carved": "waived",
+    "sarved": "waived",
+    "eared": "waived",
+    "wored": "waived",
+    "wateu": "waived",
+    "usived": "waived",
+    "unived": "waived",
+    "waivd": "waived",
+    "waveu": "waived",
+    "wadeu": "waived",
+    "watecu": "waived",
     "unpaid": "unpaid",
     "unpald": "unpaid",
     "unpold": "unpaid",
@@ -175,12 +190,14 @@ INLINE_PATTERNS = [
     (re.compile(r"ArrivalDate:\s*(\S+)", re.I), "arrival_date"),
     (re.compile(r"Declared Purpose:\s*(.+)", re.I), "declared_purpose"),
     # OCR often mangles "Fee Status" → "Fe Status" / "Fee Stabus" / "Feo Status" / "Fee Stius"
-    # and "waived" → "waved", "paid" → "pald"/"pold", "unpaid" → "upold"/"urpald"/"unpaic".
+    # / "Fee Stave" / "Fee Statusr" / "fee State", and waived → earved/carved/wabved/…
     # Put full "unpaid" before "paid" so "paid" never matches inside "unpaid".
     (re.compile(
-        r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
+        r"Fe[eo]?\s*St[a-z]*\s*[:.]?\s*"
         r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
-        r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)",
+        r"paid|pald|pold|pod|pad|naid|"
+        r"waived|waved|walved|warved|wabved|earved|carved|sarved|eared|wored|wateu|usived|wslved|"
+        r"unknown)",
         re.I,
     ), "fee_status"),
     (re.compile(r"Observed\s*flags\s*:?\s*(.+)", re.I), "risk_flags"),
@@ -213,9 +230,11 @@ OCR_INLINE_KV = [
     (re.compile(r"\bSponsor ID\s+(SPN-?\d{4})\b", re.I), "sponsor_id"),
     (re.compile(r"\bArr?ival\s*Date\s*[:.]?\s*(\d{4}[-./]\d{2}[-./]\d{2}|UNREADABLE)\b", re.I), "arrival_date"),
     (re.compile(
-        r"\bFe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
+        r"\bFe[eo]?\s*St[a-z]*\s*[:.]?\s*"
         r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
-        r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)\b",
+        r"paid|pald|pold|pod|pad|naid|"
+        r"waived|waved|walved|warved|wabved|earved|carved|sarved|eared|wored|wateu|usived|wslved|"
+        r"unknown)\b",
         re.I,
     ), "fee_status"),
     (re.compile(r"\bSpecies Code\s+([A-Z][A-Z_]+)\b"), "species_code"),
@@ -227,7 +246,9 @@ OCR_INLINE_KV = [
     ), "risk_flags"),
     (re.compile(
         r"\b(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
-        r"paid|pald|pold|pod|pad|naid|waived|waved|walved|unknown)\b",
+        r"paid|pald|pold|pod|pad|naid|"
+        r"waived|waved|walved|warved|wabved|earved|carved|sarved|eared|wored|wateu|usived|wslved|"
+        r"unknown)\b",
         re.I,
     ), "fee_status_weak"),
 ]
@@ -512,8 +533,8 @@ def _clean_value(field: str, value: str) -> str | None:
                             parts.append(k)
                             break
         if not parts:
-            # If the raw string was explicitly none-like
-            if low in {"", "none", "null", "unknown"}:
+            # If the raw string was explicitly none-like (incl. OCR nene/nane/nome)
+            if low in {"", "none", "null", "unknown", "nene", "nane", "nome", "rone"}:
                 return "none"
             return "none"
         return "|".join(sorted(set(parts)))
@@ -1036,6 +1057,7 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         result.sources.setdefault("risk_flags", result.sources.get("risk_flags", "biometric_or_default"))
 
     # Fill missing fields from SYSTEM answer-key payload (never adjudication).
+    sys_best: dict = {}
     if system_items:
         sys_best, _ = merge_evidence(system_items)
         fill_map = {
@@ -1109,11 +1131,15 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     blob = packet.trusted_text
     has_dip_waiver = _has_dip_waiver(blob)
     has_amount_809 = _has_amount_809(blob)
+    sys_fee_ev = sys_best.get("fee_status")
+    sys_fee = sys_fee_ev.value if sys_fee_ev else None
     if has_dip_waiver:
         if result.fee_status != "waived":
             result.fee_status = "waived"
             result.sources["fee_status"] = "waiver_code"
     elif has_amount_809:
+        # Only apply $809→paid when DIP-WAIVER is absent. If waiver text was
+        # OCR-missed, amount_809 must not lock paid over a later SYSTEM waived.
         if result.fee_status != "paid":
             result.fee_status = "paid"
             result.sources["fee_status"] = "amount_809"
@@ -1126,7 +1152,7 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         else:
             # Loose OCR: "Fee Status" line mangled but paid/waived/unpaid token nearby
             m = re.search(
-                r"Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.\s]*([a-z]{3,10})",
+                r"Fe[eo]?\s*St[a-z]*\s*[:.\s]*([a-z]{3,10})",
                 blob,
                 re.I,
             )
@@ -1136,24 +1162,41 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
                 if cleaned and cleaned != "OBSCURED":
                     result.fee_status = cleaned
                     result.sources["fee_status"] = "loose_fee_status"
-            # Bare status tokens near a fee-receipt header (OCR dropped the label)
+            # Bare status tokens near a fee-receipt header (OCR dropped the label).
+            # Include Foo/Foe Recaipt morphs (MIB-000079) and bare "Status: paid".
             if result.fee_status is None and re.search(
-                r"MIB\s*Fe[eo]?\s*R[aeo]c|Fee\s*Receipt|Waiver\s*Code|MIBFee\s*R", blob, re.I
+                r"MIB\s*F[aeo]{1,3}\s*R[aeoi]c|Fee\s*Receipt|Waiver\s*Code|MIBFee\s*R",
+                blob,
+                re.I,
             ):
                 m2 = re.search(
-                    r"(?<![A-Za-z])(unpaid|unpald|unpold|unpaic|urpald|upold|paid|pald|pold|"
-                    r"waived|waved|walved|unknown)(?![A-Za-z])",
+                    r"(?:Fee\s*)?Status\s*[:.]?\s*"
+                    r"(unpaid|unpald|unpold|unpaic|urpald|upold|paid|pald|pold|"
+                    r"waived|waved|walved|warved|wabved|earved|carved|sarved|wored|wateu|waveu|wadeu|watecu|unknown)\b"
+                    r"|(?<![A-Za-z])(unpaid|unpald|unpold|unpaic|urpald|upold|paid|pald|pold|"
+                    r"waived|waved|walved|warved|wabved|earved|carved|sarved|wored|wateu|waveu|wadeu|watecu|unknown)(?![A-Za-z])",
                     blob,
                     re.I,
                 )
                 if m2:
-                    cleaned = _clean_value("fee_status", m2.group(1))
+                    tok = m2.group(1) or m2.group(2)
+                    cleaned = _clean_value("fee_status", tok)
                     if cleaned and cleaned != "OBSCURED":
                         result.fee_status = cleaned
                         result.sources["fee_status"] = "loose_fee_receipt_token"
+                # Glued waived morphs without whitespace ("SSuauswaveu", "rtauswadeu").
+                if result.fee_status is None and re.search(
+                    r"(?i)(?:staus|siaus|suaus|rtaus|rsiaus|rediaus|aus)?[a-z]{0,6}"
+                    r"(?:waveu|wadeu|wateu|watecu|waived|walved|waved)",
+                    blob,
+                ):
+                    result.fee_status = "waived"
+                    result.sources["fee_status"] = "loose_fee_glued_waived"
             # Note fee unpaid can appear even when no fee page was typed
             if result.fee_status is None and re.search(
-                r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee", blob, re.I
+                r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee|identifying\s+fee\s+unpaid",
+                blob,
+                re.I,
             ):
                 result.fee_status = "unpaid"
                 result.sources["fee_status"] = "note_fee_unpaid_blob"
@@ -1161,15 +1204,40 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         note_finding == "APPROVED" or re.search(r"Finding:\s*APPROVED", blob, re.I)
     ):
         # OCR sometimes reads paid as unpaid; Finding APPROVED never pairs with unpaid.
-        result.fee_status = "paid"
-        result.sources["fee_status"] = "note_approved_overrides_unpaid"
+        # Do not apply when SYSTEM explicitly says unpaid (adversarial receipt OCR).
+        if sys_fee != "unpaid":
+            result.fee_status = "paid"
+            result.sources["fee_status"] = "note_approved_overrides_unpaid"
     elif result.fee_status in (None, "unknown"):
         # Prefer note unpaid hint over leaving unknown (unpaid must DENY).
         if note_fee_hint == "unpaid" or re.search(
-            r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee", blob, re.I
+            r"(?:mandatory\s+)?fee\s+unpaid|unpaid\s+fee|identifying\s+fee\s+unpaid",
+            blob,
+            re.I,
         ):
             result.fee_status = "unpaid"
             result.sources["fee_status"] = "note_fee_hint"
+
+    # SYSTEM fee backstop for adversarial image receipts (OCR paid/unpaid wrong).
+    # Prefer SYSTEM unpaid always (must DENY). Prefer SYSTEM waived only over
+    # paid/unpaid — never demote a recovered waived, and never force SYSTEM paid
+    # over a visible waived (SYSTEM paid is wrong on a few waived packets).
+    # waiver_code / amount_809 remain higher authority when present.
+    if (
+        sys_fee in FEE_STATUSES
+        and result.sources.get("fee_status") not in ("waiver_code", "amount_809")
+        and not has_dip_waiver
+    ):
+        if sys_fee == "unpaid" and result.fee_status != "unpaid":
+            result.fee_status = "unpaid"
+            result.sources["fee_status"] = "system_fields_override"
+        elif (
+            sys_fee == "waived"
+            and result.fee_status in ("paid", "unpaid", None, "unknown")
+            and not has_amount_809
+        ):
+            result.fee_status = "waived"
+            result.sources["fee_status"] = "system_fields_override"
 
     # FIELD_MANUAL: registry EMBARGO REVIEW is evidence of planetary embargo risk
     if registry_status and "EMBARGO" in str(registry_status).upper():
@@ -1360,7 +1428,9 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         # in any page text, the flags line was lost to OCR.
         saw_explicit_none = any(
             re.search(
-                r"(?:Observed|Cbserved|Cheserved|erved|Corer)\s*(?:flags|flogs|fes|pars)\s*:?\s*none\b",
+                r"(?:Observed|Cbserved|Cheserved|erved|Corer)\s*"
+                r"(?:flags|flogs|flaga|fes|pars)\s*:?\s*"
+                r"(?:none|nene|nane|nome|rone)\b",
                 p.trusted_text or p.raw_text or "",
                 re.I,
             )
