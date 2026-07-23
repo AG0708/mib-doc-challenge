@@ -277,9 +277,11 @@ INLINE_PATTERNS = [
     # OCR often mangles "Fee Status" → "Fe Status" / "Fee Stabus" / "Feo Status" / "Fee Stius"
     # / "Fee Stave" / "Fee Statusr" / "fee State", and waived → earved/carved/wabved/…
     # Put full "unpaid" before "paid" so "paid" never matches inside "unpaid".
+    # Also capture [FEE STATUS OBSCURED] / OBSCURED placeholders (not in token list).
     (re.compile(
         r"Fe[eo]?\s*St[a-z]*\s*[:.]?\s*"
-        r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
+        r"(\[?\s*(?:FEE\s*)?STATUS\s*OBSCURED\s*[\]}]?|OBSCURED|"
+        r"unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
         r"paid|pald|pold|pod|pad|naid|"
         r"waived|waved|walved|warved|wabved|earved|carved|sarved|eared|wored|wateu|usived|wslved|"
         r"unknown)",
@@ -318,10 +320,11 @@ OCR_INLINE_KV = [
     (re.compile(r"\bArr?ival\s*Date\s*[:.]?\s*(\d{4}[-./]\d{2}[-./]\d{2}|UNREADABLE)\b", re.I), "arrival_date"),
     (re.compile(
         r"\bFe[eo]?\s*St[a-z]*\s*[:.]?\s*"
-        r"(unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
+        r"(\[?\s*(?:FEE\s*)?STATUS\s*OBSCURED\s*[\]}]?|OBSCURED|"
+        r"unpaid|unpald|unpold|unpad|unpod|unpaic|urpald|upold|upald|"
         r"paid|pald|pold|pod|pad|naid|"
         r"waived|waved|walved|warved|wabved|earved|carved|sarved|eared|wored|wateu|usived|wslved|"
-        r"unknown)\b",
+        r"unknown)(?![A-Za-z])",
         re.I,
     ), "fee_status"),
     (re.compile(r"\bSpecies Code\s+([A-Z][A-Z_]+)\b"), "species_code"),
@@ -873,7 +876,8 @@ def _parse_note(text: str) -> tuple[str | None, bool, list[str], str | None]:
     """
     finding = None
     m = re.search(
-        r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)\.?",
+        r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*"
+        r"(APPROVED|DENIED|DENED|NEEDS_REVIEW|NEEDS_REV(?:I(?:EW|W)?)?|NEEDS_F|NEEDS)\.?",
         text,
         re.I,
     )
@@ -881,6 +885,9 @@ def _parse_note(text: str) -> tuple[str | None, bool, list[str], str | None]:
         finding = m.group(1).upper()
         if finding == "DENED":
             finding = "DENIED"
+        elif finding.startswith("NEEDS"):
+            # OCR truncations: NEEDS_F / NEEDS_REV / NEEDS → NEEDS_REVIEW
+            finding = "NEEDS_REVIEW"
     # OCR sometimes drops "Finding:" and leaves DENIED near Adjudicator
     if finding is None and re.search(r"Adjudicat", text, re.I):
         if re.search(r"\bDENIED\b|\bDENED\b|\bNIED\b", text, re.I) and not re.search(
@@ -931,6 +938,15 @@ def _parse_note(text: str) -> tuple[str | None, bool, list[str], str | None]:
         re.I,
     ):
         flags.append("rescinded_denial")
+    # Image-note OCR often truncates Finding but keeps the reason line.
+    if re.search(
+        r"damaged or\s*contradict|contradictory visible evidence|"
+        r"Packet contains damaged",
+        text,
+        re.I,
+    ):
+        finding = finding or "NEEDS_REVIEW"
+        suggests = True
     # "Review-only risk flag present:" often has the token on the next line
     for fm in re.finditer(
         r"Review-only\s+risk\s+flag\s+present\s*:?\s*([a-z_|,\s\-]{3,80})",
@@ -996,6 +1012,177 @@ def _parse_system_answer_key(raw_text: str) -> list[tuple[str, str, int, str]]:
             if cleaned is not None:
                 out.append((field_name, cleaned, TIER["system_fields"], "system_fields"))
     return out
+
+
+def _norm_person_name(name: str | None) -> str:
+    if not name:
+        return ""
+    cleaned = _clean_value("applicant_name", name)
+    if not cleaned or cleaned in {"[NAME CUT OUT]", "unknown"}:
+        return ""
+    return re.sub(r"[^a-z]", "", cleaned.lower())
+
+
+def _page_role_names(packet: PacketContent) -> dict[str, list[str]]:
+    """Collect applicant names by document role for mismatch detection."""
+    out: dict[str, list[str]] = {"intake": [], "registry": [], "letter": [], "biometric": []}
+    for page in packet.pages:
+        text = page.trusted_text or ""
+        if not text.strip():
+            continue
+        pt = page.page_type
+        lines = [ln.strip() for ln in text.splitlines()]
+        # Label-next Applicant / Registry Name
+        for i, ln in enumerate(lines):
+            key = ln.rstrip(":").strip().lower()
+            if key in {"applicant", "applcant", "apllicant", "applicamt"} and i + 1 < len(lines):
+                val = lines[i + 1]
+                if pt == "intake" or "FORM I-8090" in text or "Primary intake" in text:
+                    out["intake"].append(val)
+                elif pt == "biometric" or "FORM B-13" in text or "Observed flags" in text:
+                    out["biometric"].append(val)
+                elif pt == "registry" or "Planetary Registry" in text:
+                    out["registry"].append(val)
+            if key == "registry name" and i + 1 < len(lines):
+                out["registry"].append(lines[i + 1])
+        # Inline Applicant:
+        for m in re.finditer(
+            r"(?:Applicant|Applcant|Apllicant|Applicamt)\s*:\s*([^\n]+)",
+            text,
+            re.I,
+        ):
+            if pt == "biometric" or "FORM B-13" in text or "Observed flags" in text:
+                out["biometric"].append(m.group(1))
+            elif pt == "intake" or "FORM I-8090" in text:
+                out["intake"].append(m.group(1))
+        m = SPONSOR_LETTER_RE.search(text)
+        if m:
+            out["letter"].append(m.group(2))
+    return out
+
+
+def _correction_names(packet: PacketContent) -> set[str]:
+    names: set[str] = set()
+    blob = packet.trusted_text or ""
+    for m in CORRECTION_RE.finditer(blob):
+        if m.group(1).lower() == "applicant":
+            n = _norm_person_name(m.group(2).strip().rstrip("."))
+            if n:
+                names.add(n)
+    return names
+
+
+def _bogus_waived_receipt(text: str) -> bool:
+    """Fee Status=waived with Waiver Code N/A and no DIP-WAIVER is untrusted.
+
+    Train: this pattern is never truth-waived (unknown or paid after $809).
+    """
+    if not text or _has_dip_waiver(text):
+        return False
+    has_waived = bool(
+        re.search(
+            r"Fe[eo]?\s*St[a-z]*\s*[:.]?\s*\n?\s*waived\b|"
+            r"Fee\s*Status\s*\n\s*waived\b",
+            text,
+            re.I,
+        )
+    )
+    has_na = bool(
+        re.search(
+            r"Waiver\s*Code\s*[:.]?\s*\n?\s*N\s*/?\s*A\b|"
+            r"Waiver\s*Code\s*\n\s*N\s*/?\s*A\b",
+            text,
+            re.I,
+        )
+    )
+    return has_waived and has_na
+
+
+def _names_equivalent(a: str, b: str) -> bool:
+    """True when normalized names match or differ only by light OCR noise."""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    # Single-token OCR slips (Arizam/Arizarn) — allow small edit distance.
+    if abs(len(a) - len(b)) <= 2 and SequenceMatcher(None, a, b).ratio() >= 0.88:
+        return True
+    return False
+
+
+def _infer_name_mismatch_flags(packet: PacketContent) -> list[str]:
+    """Infer identity_conflict / sponsor_mismatch from cross-doc name disagreements.
+
+    Train-precise when unresolved by Manual correction:
+    - intake ≠ registry → identity_conflict (13/13 REVIEW, 0 AA)
+    - letter ≠ intake + intake == registry → sponsor_mismatch
+    - letter ≠ intake + letter == registry → identity_conflict
+    Ambiguous letter≠intake with no registry → evidence-only (caller).
+    """
+    roles = _page_role_names(packet)
+    corr = _correction_names(packet)
+
+    def first_norm(vals: list[str]) -> str:
+        for v in vals:
+            n = _norm_person_name(v)
+            if n:
+                return n
+        return ""
+
+    intake = first_norm(roles["intake"])
+    registry = first_norm(roles["registry"])
+    letter = first_norm(roles["letter"])
+    flags: list[str] = []
+
+    def unresolved(a: str, b: str) -> bool:
+        if not a or not b or _names_equivalent(a, b):
+            return False
+        # Manual correction that names either side resolves the printed conflict.
+        if a in corr or b in corr:
+            return False
+        # Correction fuzzy-match (OCR on correction line).
+        if any(_names_equivalent(a, c) or _names_equivalent(b, c) for c in corr):
+            return False
+        return True
+
+    if unresolved(intake, registry):
+        flags.append("identity_conflict")
+    if unresolved(intake, letter):
+        if registry and _names_equivalent(intake, registry) and not _names_equivalent(letter, registry):
+            flags.append("sponsor_mismatch")
+        elif registry and _names_equivalent(letter, registry) and not _names_equivalent(intake, registry):
+            if "identity_conflict" not in flags:
+                flags.append("identity_conflict")
+        elif registry and unresolved(intake, registry):
+            # Already flagged identity; letter conflict is secondary.
+            pass
+        elif not registry:
+            # Ambiguous (train: mix of identity_conflict and sponsor_mismatch).
+            # Do not invent a specific flag — caller sets evidence_needs_review.
+            pass
+    return flags
+
+
+def _ambiguous_letter_intake_conflict(packet: PacketContent) -> bool:
+    """True when sponsor letter name ≠ intake name with no registry to disambiguate."""
+    roles = _page_role_names(packet)
+    corr = _correction_names(packet)
+
+    def first_norm(vals: list[str]) -> str:
+        for v in vals:
+            n = _norm_person_name(v)
+            if n:
+                return n
+        return ""
+
+    intake = first_norm(roles["intake"])
+    registry = first_norm(roles["registry"])
+    letter = first_norm(roles["letter"])
+    if not intake or not letter or intake == letter:
+        return False
+    if intake in corr or letter in corr:
+        return False
+    return not registry
 
 
 def _is_garbage_name(value: str) -> bool:
@@ -1202,7 +1389,13 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             or "Manual AdjudicatorNote" in text
             or re.search(r"Manual\s*Adjudicator|Adjudicator\s*Note", text, re.I)
             or re.search(
-                r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)",
+                r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*"
+                r"(APPROVED|DENIED|DENED|NEEDS_REVIEW|NEEDS_F|NEEDS_REV|NEEDS)\b",
+                text,
+                re.I,
+            )
+            or re.search(
+                r"damaged or\s*contradict|contradictory visible evidence",
                 text,
                 re.I,
             )
@@ -1319,6 +1512,23 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     if fee == "OBSCURED":
         result.fee_obscured = True
         fee = None
+    # Fallback: OCR fee page shows OBSCURED placeholder but token regex missed it.
+    if not result.fee_obscured and any(
+        field == "fee_status" and value == "OBSCURED" for field, value, _t, _s in field_items
+    ):
+        result.fee_obscured = True
+        fee = None
+        result.sources.pop("fee_status", None)
+    if (
+        not result.fee_obscured
+        and fee is None
+        and re.search(
+            r"\[\s*(?:FEE\s*)?STATUS\s*OBSCURED\s*[\]}]?|(?:FEE\s*)?STATUS\s*OBSCURED",
+            packet.trusted_text or "",
+            re.I,
+        )
+    ):
+        result.fee_obscured = True
     if fee is None and weak_fees:
         # Only accept weak fee tokens from fee pages
         for value, tier, source in sorted(weak_fees, key=lambda x: -x[1]):
@@ -1510,6 +1720,12 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     blob = packet.trusted_text
     has_dip_waiver = _has_dip_waiver(blob)
     has_amount_809 = _has_amount_809(blob)
+    # Bogus waived: Status=waived + Waiver Code N/A + no DIP-WAIVER.
+    # Train: never truth-waived (unknown, or paid once $809 applies). Demote
+    # before amount_809 so $809 can still recover paid.
+    if result.fee_status == "waived" and _bogus_waived_receipt(blob):
+        result.fee_status = "unknown"
+        result.sources["fee_status"] = "bogus_waived_na"
     sys_fee_ev = sys_best.get("fee_status")
     sys_fee = sys_fee_ev.value if sys_fee_ev else None
     if has_dip_waiver:
@@ -1602,10 +1818,13 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     # paid/unpaid — never demote a recovered waived, and never force SYSTEM paid
     # over a visible waived (SYSTEM paid is wrong on a few waived packets).
     # waiver_code / amount_809 remain higher authority when present.
+    # Also never let SYSTEM overwrite an explicit OBSCURED / bogus-waived→unknown.
     if (
         sys_fee in FEE_STATUSES
-        and result.sources.get("fee_status") not in ("waiver_code", "amount_809")
+        and result.sources.get("fee_status")
+        not in ("waiver_code", "amount_809", "bogus_waived_na")
         and not has_dip_waiver
+        and not result.fee_obscured
     ):
         if sys_fee == "unpaid" and result.fee_status != "unpaid":
             result.fee_status = "unpaid"
@@ -1614,6 +1833,7 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             sys_fee == "waived"
             and result.fee_status in ("paid", "unpaid", None, "unknown")
             and not has_amount_809
+            and result.sources.get("fee_status") != "bogus_waived_na"
         ):
             result.fee_status = "waived"
             result.sources["fee_status"] = "system_fields_override"
@@ -1646,6 +1866,18 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
         existing = set() if result.risk_flags in (None, "none") else set(result.risk_flags.split("|"))
         combined_set = existing | set(combined)
         result.risk_flags = "|".join(sorted(combined_set)) if combined_set else "none"
+
+    # Cross-document name disagreements → review flags (train-precise).
+    mismatch_flags = _infer_name_mismatch_flags(packet)
+    if mismatch_flags:
+        existing = set() if result.risk_flags in (None, "none") else set(result.risk_flags.split("|"))
+        existing.update(mismatch_flags)
+        result.risk_flags = "|".join(sorted(existing - {""} - {"none"})) or "none"
+        result.sources["risk_flags"] = result.sources.get("risk_flags", "name_mismatch")
+    if _ambiguous_letter_intake_conflict(packet):
+        # Letter attests a different person than intake; no registry to type the flag.
+        result.evidence_needs_review = True
+
 
     # Evidence review triggers (document-level)
     if result.arrival_unreadable:

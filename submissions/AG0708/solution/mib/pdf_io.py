@@ -95,7 +95,8 @@ _OCR_KEEP_RE = re.compile(
     r"FORM\s*B-?\d{1,2}|Biomot|Biometric|Blometric|Adjudicat|Scan\s*Slip|Sean\s*a|"
     r"Species\s*Match|peciesMatch|"
     r"B-1[123]|embargo|biohazard|warrant|tamper|Reason|DIP-WAIVER|earved|carved|"
-    r"illegible|identity_confl|rescind|leglt|biemtrice|boglcl",
+    r"illegible|identity_confl|rescind|leglt|biemtrice|boglcl|"
+    r"NEEDS_F|NEEDS_REV|damaged or\s*contradict|contradictory visible",
     re.I,
 )
 
@@ -120,7 +121,8 @@ def classify_page(text: str) -> str:
             return name
     if re.search(
         r"Manual\s*Adjudicator|Adjudicator\s*Note|"
-        r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)",
+        r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW|NEEDS_F|NEEDS_REV|NEEDS)\b|"
+        r"damaged or\s*contradict|contradictory visible evidence",
         text,
         re.I,
     ):
@@ -574,6 +576,10 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"FndingDENIED", "Finding: DENIED"),
         (r"FindngDENIED", "Finding: DENIED"),
         (r"FndingDENED", "Finding: DENIED"),
+        # Truncated OCR: Finding:NEEDS_F / NEEDS_REV → NEEDS_REVIEW
+        (r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*NEEDS_F\b", "Finding: NEEDS_REVIEW"),
+        (r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*NEEDS_REV(?:I(?:EW|W)?)?\b", "Finding: NEEDS_REVIEW"),
+        (r"F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*NEEDS\b(?!\s*_?(?:REVIEW|F|REV))", "Finding: NEEDS_REVIEW"),
         (r"plontary_emro", "planetary_embargo"),
         (r"plnetary_embogo", "planetary_embargo"),
         (r"plery_emo", "planetary_embargo"),
