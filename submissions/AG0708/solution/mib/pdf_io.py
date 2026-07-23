@@ -81,6 +81,9 @@ USEFUL_MARKERS = (
     "FeeStatus",
     "Observed flags",
     "Observedflags",
+    "bservedflags",  # OCR drops leading "O"
+    "Species Match",
+    "SpeciesMatch",
     "Manual correction",
     "Registry Name",
     "RegistryName",
@@ -88,9 +91,11 @@ USEFUL_MARKERS = (
 
 # Loose keep-pattern for embedded-image OCR that RapidOCR mangles heavily.
 _OCR_KEEP_RE = re.compile(
-    r"MIB-\d{6}|SPN-?\d{4}|Observed|Fee|paid|waiv|unpaid|flag|Finding|DENIED|APPROVED|"
+    r"MIB-\d{6}|SPN-?\d{4}|Observed|bservedflags|Fee|paid|waiv|unpaid|flag|Finding|DENIED|APPROVED|"
     r"FORM\s*B-?\d{1,2}|Biomot|Biometric|Blometric|Adjudicat|Scan\s*Slip|Sean\s*a|"
-    r"B-1[123]|embargo|biohazard|warrant|tamper|Reason|DIP-WAIVER|earved|carved",
+    r"Species\s*Match|peciesMatch|"
+    r"B-1[123]|embargo|biohazard|warrant|tamper|Reason|DIP-WAIVER|earved|carved|"
+    r"illegible|identity_confl|rescind|leglt|biemtrice|boglcl",
     re.I,
 )
 
@@ -440,9 +445,12 @@ def _ocr_numpy(img: np.ndarray) -> str:
     # page looks like B-13 / note / fee without a usable value line.
     has_flag_line = bool(
         re.search(
-            r"(?:Observed|Cbserved|Cheserved|erved)\s*(?:flags|flogs|flaga|fes)\s*:?\s*"
+            r"(?:Observed|Cbserved|Cheserved|Ohserved|Obsarvad|Obaved|Chsarved|"
+            r"Ubserved|upserved|erved)\s*"
+            r"(?:flags|flogs|flaga|flans|fligs|floge|fags|fonge|lags|tlags|fes|fl)\s*:?\s*"
             r"(none|biohazard|planetary|active_warrant|memory_tamper|illegible|identity|"
-            r"sponsor_mismatch|rescinded|[a-z]*h[ae][zx]?[ae]?r?d|[a-z]*warrant|[a-z]*tamper|[a-z]*embargo)",
+            r"sponsor_mismatch|rescinded|legibl|leglt|lenib|begi|bogl|biem|biomat|igili|"
+            r"ilenib|conflit|confic|[a-z]*h[ae][zx]?[ae]?r?d|[a-z]*warrant|[a-z]*tamper|[a-z]*embargo)",
             rapid,
             re.I,
         )
@@ -490,21 +498,29 @@ def _ocr_numpy(img: np.ndarray) -> str:
             if note_hdr:
                 rapid = (rapid + "\n" + note_hdr).strip() if rapid else note_hdr
                 looks_b13_note = True
+    # Weak B-13 morphs (B-12 / Biomotie / truncated Species Match) also need tess —
+    # Rapid often drops the Observed-flags value line at low DPI.
+    looks_weak_b13 = bool(
+        re.search(
+            r"B-1[123]|Biomot|Bonotice|Sean\s*a|Scan\s*Slip|"
+            r"Species\s*Match|[A-Za-z]?peciesMatch|[A-Za-z]?ciesMatch|"
+            r"SCAN\s*IMAGE|SCANIMAGE",
+            rapid,
+            re.I,
+        )
+    )
     needs_tess = (
         (looks_b13_note and not has_flag_line)
+        or (looks_weak_b13 and not has_flag_line)
         or (looks_fee and not has_fee_value)
         or (looks_intake_cutout and re.search(r"NAME\s*CUT\s*OUT", rapid, re.I))
-    )
-    # Weak B-13 morphs (B-12 / Biomotie) also need tess — Rapid drops flag lines.
-    looks_weak_b13 = bool(
-        re.search(r"B-1[123]|Biomot|Bonotice|Sean\s*a|Scan\s*Slip", rapid, re.I)
     )
     # sparse_rapid→tess is the runaway path (huge rasters, little signal).
     # Off by default under MIB_TESS_FAST; otherwise require very large pages.
     allow_sparse_tess = os.environ.get("MIB_TESS_SPARSE", "").strip() in {"1", "true", "yes"}
     fast = os.environ.get("MIB_TESS_FAST", "").strip() in {"1", "true", "yes"}
     sparse_ok = (not fast) and allow_sparse_tess and sparse_rapid and img.shape[0] >= 1000 and img.shape[1] >= 800
-    if needs_tess or looks_weak_b13 or (
+    if needs_tess or (
         re.search(r"FORM\s*B-?13|Blometric", rapid, re.I)
         and re.search(r"RISK\s*PANEL\s*MISSING|IRISKPANEL", rapid, re.I)
     ) or sparse_ok:
@@ -519,9 +535,12 @@ def _ocr_numpy(img: np.ndarray) -> str:
             tess = _ocr_tesseract(tess_img)
             tess_has_signal = bool(
                 re.search(
-                    r"(?:Observed|Cbserved|Cheserved|erved|Corer)\s*(?:flags|flogs|fes|pars)"
+                    r"(?:Observed|Cbserved|Cheserved|Ohserved|Obsarvad|erved|Corer)\s*"
+                    r"(?:flags|flogs|flans|fligs|floge|fags|fes|pars)"
                     r"|F(?:i|l)?n?d(?:i|l)?ng\s*:?\s*(APPROVED|DENIED|DENED|NEEDS_REVIEW)"
                     r"|h[ae][zx][ae]?r?d|warrant|tamper|embargo|biohazard|embogo|emro"
+                    r"|leglt|lenib|biemat|biemtrice|boglcl|ilenib|igili.?bim|identity.?confl"
+                    r"|Prior\s+denial\s+stamp\s+rescind"
                     r"|Fe[eo]?\s*St[a-z]*u[sae]*\s*[:.]?\s*"
                     r"(unpaid|paid|waived|unknown|unp|urp|upold|pald|pold|waved)"
                     r"|\$809\.00|\bDIP-WAIVER\b",
@@ -625,6 +644,8 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"(?i)\bwatecu\b", "waived"),
         (r"(?i)\bwaveu\b", "waived"),
         (r"(?i)\bwadeu\b", "waived"),
+        (r"bservedflags:", "Observed flags: "),
+        (r"bservedflags", "Observed flags "),
         (r"Observedflags:", "Observed flags: "),
         (r"ObserObserved flags:", "Observed flags: "),
         (r"ObseIvedfes:", "Observed flags: "),
@@ -636,8 +657,30 @@ def _normalize_ocr_spacing(text: str) -> str:
         (r"DbserObserved flags:", "Observed flags: "),
         (r"ved flogs:", "Observed flags: "),
         (r"ved flags:", "Observed flags: "),
+        (r"Ohserved\s*flans\s*:", "Observed flags: "),
+        (r"Ohservedflans", "Observed flags "),
+        (r"Obsarvad\s*fonge\s*:", "Observed flags: "),
+        (r"Obaved\s*fl\s*:", "Observed flags: "),
+        (r"Chsarved\s*fags\s*:", "Observed flags: "),
+        (r"Ubserved\s*lags\s*:", "Observed flags: "),
+        (r"upserved\s*tlags\s*:", "Observed flags: "),
+        (r"Observed\s*fligs\s*:", "Observed flags: "),
+        (r"Observed\s*floge\s*:", "Observed flags: "),
+        (r"Observed\s*flans\s*:", "Observed flags: "),
+        (r"Observed\s*fags\s*:", "Observed flags: "),
+        (r"seObserved flags:", "Observed flags: "),
         (r"Observedflags", "Observed flags "),
         (r"Observed flags(?=\s*[\[a-z])", "Observed flags: "),  # missing colon before value
+        (r"legltlebiomatice", "illegible_biometrics"),
+        (r"Begin\s*biemtrice", "illegible_biometrics"),
+        (r"Boglcl_bometrics", "illegible_biometrics"),
+        (r"ilenibla\.?\s*biometrics", "illegible_biometrics"),
+        (r"Igili_bim\b", "illegible_biometrics"),
+        (r"identity_conflit\b", "identity_conflict"),
+        (r"ntty_conficf\b", "identity_conflict"),
+        (r"\[RESKPANEL", "[RISK PANEL"),
+        (r"RESKPANEL\s*MISSING", "RISK PANEL MISSING"),
+        (r"RESKPANEL\s*NG", "RISK PANEL MISSING"),
         (r"bichanard", "biohazard"),
         (r"bichexard", "biohazard"),
         (r"bicharerd", "biohazard"),
@@ -775,6 +818,15 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                 fee_like_no_value = bool(
                     re.search(r"MIB\s*Fe|Fee\s*R|Waiver\s*Code|Fee\s*St", ocr_text or "", re.I)
                 ) and not _has_fee_signal(ocr_text or "")
+                embedded_has_flags = bool(
+                    re.search(
+                        r"(?:Observed|bserved|Cbserved|Cheserved).*flag|"
+                        r"identity_confl|illegible|biohazard|embargo|warrant|tamper|"
+                        r"rescind|leglt|biemtrice|boglcl|Igili_bim",
+                        ocr_text or "",
+                        re.I,
+                    )
+                )
                 if (
                     not ocr_text
                     or not any(m in ocr_text for m in USEFUL_MARKERS)
@@ -796,6 +848,10 @@ def load_packet(path: Path | str, *, ocr_dpi: int = 120, force_ocr: bool = False
                                 if fee_like_no_value and rendered:
                                     # Merge complementary tokens rather than length-pick.
                                     if rendered not in ocr_text:
+                                        ocr_text = (ocr_text + "\n" + rendered).strip()
+                                elif embedded_has_flags:
+                                    # Keep embedded flag line; merge render only if complementary.
+                                    if rendered and rendered not in ocr_text:
                                         ocr_text = (ocr_text + "\n" + rendered).strip()
                                 else:
                                     ocr_text = rendered if len(rendered) >= len(ocr_text) else ocr_text
