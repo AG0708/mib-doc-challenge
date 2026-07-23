@@ -92,3 +92,46 @@ export const competitorPulse = sqliteTable("competitor_pulse", {
   weekDelta: real("week_delta").notNull(),
   topHook: text("top_hook").notNull(),
 });
+
+export const tasks = sqliteTable("tasks", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("open"), // open | done
+  priority: text("priority").notNull().default("med"), // low | med | high
+  dueAt: text("due_at"),
+  assignee: text("assignee").notNull(),
+  entityType: text("entity_type"), // prospect | creator | none
+  entityId: text("entity_id"),
+  entityLabel: text("entity_label"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const entityNotes = sqliteTable("entity_notes", {
+  id: text("id").primaryKey(),
+  entityType: text("entity_type").notNull(), // prospect | creator
+  entityId: text("entity_id").notNull(),
+  author: text("author").notNull(),
+  body: text("body").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const contentPosts = sqliteTable("content_posts", {
+  id: text("id").primaryKey(),
+  creatorId: text("creator_id").notNull(),
+  platform: text("platform").notNull(),
+  url: text("url").notNull().default(""),
+  caption: text("caption").notNull().default(""),
+  views: integer("views").notNull().default(0),
+  installs: integer("installs").notNull().default(0),
+  postedAt: text("posted_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const messageTemplates = sqliteTable("message_templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  channel: text("channel").notNull().default("dm"), // dm | email | slack
+  body: text("body").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

@@ -13,6 +13,9 @@ import {
   Cpu,
   Settings,
   UserRound,
+  CheckSquare,
+  FileText,
+  Clapperboard,
 } from "lucide-react";
 import { useSearch } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -22,6 +25,9 @@ const PAGES = [
   { href: "/outreach", label: "Outreach", hint: "Prospect funnel", icon: Radar },
   { href: "/crm", label: "CRM", hint: "Onboarding pipeline", icon: GitBranch },
   { href: "/roster", label: "Roster", hint: "Live creators", icon: Users },
+  { href: "/tasks", label: "Tasks", hint: "Ops to-dos", icon: CheckSquare },
+  { href: "/content", label: "Content", hint: "Logged posts", icon: Clapperboard },
+  { href: "/templates", label: "Templates", hint: "DM / email copy", icon: FileText },
   { href: "/financials", label: "Financials", hint: "Payroll ledger", icon: Wallet },
   { href: "/systems", label: "Systems", hint: "Webhooks + schema", icon: Cpu },
   { href: "/settings", label: "Settings", hint: "Workspace + reset", icon: Settings },

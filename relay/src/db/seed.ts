@@ -2,10 +2,14 @@ import type { Db } from "./index";
 import {
   activity,
   competitorPulse,
+  contentPosts,
   creators,
   dailyMetrics,
+  entityNotes,
+  messageTemplates,
   payouts,
   prospects,
+  tasks,
   webhookEvents,
 } from "./schema";
 import {
@@ -17,12 +21,190 @@ import {
   prospects as seedProspects,
   seedWebhooks,
 } from "@/data/seed";
+import { isoDaysAgo, isoHoursAgo } from "@/lib/time";
 
 const now = () => new Date().toISOString();
 
+function seedExtras(db: Db) {
+  if (db.select().from(tasks).limit(1).all().length === 0) {
+    const ts = now();
+    db.insert(tasks)
+      .values([
+        {
+          id: "t1",
+          title: "Prep Nora Voss agency rate card",
+          status: "open",
+          priority: "high",
+          dueAt: isoHoursAgo(-20),
+          assignee: "Noor",
+          entityType: "prospect",
+          entityId: "p7",
+          entityLabel: "Nora Voss",
+          createdAt: ts,
+          updatedAt: ts,
+        },
+        {
+          id: "t2",
+          title: "Nudge Cass Rivera for missing posts",
+          status: "open",
+          priority: "high",
+          dueAt: isoHoursAgo(-4),
+          assignee: "Jules",
+          entityType: "creator",
+          entityId: "c4",
+          entityLabel: "Cass Rivera",
+          createdAt: ts,
+          updatedAt: ts,
+        },
+        {
+          id: "t3",
+          title: "Review Felix Orth onboarding docs",
+          status: "open",
+          priority: "med",
+          dueAt: isoDaysAgo(-1),
+          assignee: "Marcus",
+          entityType: "creator",
+          entityId: "c6",
+          entityLabel: "Felix Orth",
+          createdAt: ts,
+          updatedAt: ts,
+        },
+        {
+          id: "t4",
+          title: "Send Mina Okonkwo call brief",
+          status: "done",
+          priority: "med",
+          dueAt: isoDaysAgo(1),
+          assignee: "Ava",
+          entityType: "prospect",
+          entityId: "p1",
+          entityLabel: "Mina Okonkwo",
+          createdAt: ts,
+          updatedAt: ts,
+        },
+      ])
+      .run();
+  }
+
+  if (db.select().from(entityNotes).limit(1).all().length === 0) {
+    db.insert(entityNotes)
+      .values([
+        {
+          id: "n1",
+          entityType: "creator",
+          entityId: "c1",
+          author: "Ava",
+          body: "Best performing hook this month: face-reveal POV with product CTA in first 2s.",
+          createdAt: isoHoursAgo(6),
+        },
+        {
+          id: "n2",
+          entityType: "creator",
+          entityId: "c4",
+          author: "Jules",
+          body: "Missed 2 posts. Escalating standing to watch. Offer script pack.",
+          createdAt: isoHoursAgo(10),
+        },
+        {
+          id: "n3",
+          entityType: "prospect",
+          entityId: "p7",
+          author: "Noor",
+          body: "Agency wants exclusivity clause for 60 days. Legal review needed before call.",
+          createdAt: isoHoursAgo(2),
+        },
+      ])
+      .run();
+  }
+
+  if (db.select().from(contentPosts).limit(1).all().length === 0) {
+    const ts = now();
+    db.insert(contentPosts)
+      .values([
+        {
+          id: "cp1",
+          creatorId: "c7",
+          platform: "tiktok",
+          url: "https://tiktok.com/@tessavale/video/1",
+          caption: "One photo. Full footprint.",
+          views: 2100000,
+          installs: 3100,
+          postedAt: isoHoursAgo(3),
+          createdAt: ts,
+        },
+        {
+          id: "cp2",
+          creatorId: "c1",
+          platform: "tiktok",
+          url: "https://tiktok.com/@lilachen/video/2",
+          caption: "I reverse-searched my date…",
+          views: 980000,
+          installs: 1400,
+          postedAt: isoHoursAgo(8),
+          createdAt: ts,
+        },
+        {
+          id: "cp3",
+          creatorId: "c11",
+          platform: "tiktok",
+          url: "https://tiktok.com/@sukiahn/video/3",
+          caption: "Hook B test — privacy myths",
+          views: 720000,
+          installs: 980,
+          postedAt: isoHoursAgo(6),
+          createdAt: ts,
+        },
+        {
+          id: "cp4",
+          creatorId: "c4",
+          platform: "youtube",
+          url: "https://youtube.com/watch?v=cass1",
+          caption: "App walkthrough longform",
+          views: 120000,
+          installs: 180,
+          postedAt: isoDaysAgo(8),
+          createdAt: ts,
+        },
+      ])
+      .run();
+  }
+
+  if (db.select().from(messageTemplates).limit(1).all().length === 0) {
+    const ts = now();
+    db.insert(messageTemplates)
+      .values([
+        {
+          id: "tpl1",
+          name: "First outreach DM",
+          channel: "dm",
+          body: "Hey {{name}} — loved your recent {{niche}} content. We pay creators tied to real installs/web visits on Sherlock. Open to a 15-min call this week?",
+          updatedAt: ts,
+        },
+        {
+          id: "tpl2",
+          name: "Post-call follow-up",
+          channel: "email",
+          body: "Thanks for hopping on, {{name}}. Attaching rate card + content guidelines. Reply with your preferred start date and we'll send the web onboarding link.",
+          updatedAt: ts,
+        },
+        {
+          id: "tpl3",
+          name: "Cadence nudge (Slack)",
+          channel: "slack",
+          body: ":warning: {{name}} is behind on posts ({{done}}/{{due}}). Standing={{standing}}. Deep link: {{deepLink}}",
+          updatedAt: ts,
+        },
+      ])
+      .run();
+  }
+}
+
 export function seedIfEmpty(db: Db) {
   const row = db.select().from(creators).limit(1).all();
-  if (row.length > 0) return;
+  if (row.length > 0) {
+    seedExtras(db);
+    return;
+  }
 
   const ts = now();
 
@@ -146,4 +328,6 @@ export function seedIfEmpty(db: Db) {
       })),
     )
     .run();
+
+  seedExtras(db);
 }

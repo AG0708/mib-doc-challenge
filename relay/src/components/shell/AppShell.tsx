@@ -13,6 +13,9 @@ import {
   Menu,
   X,
   Bell,
+  CheckSquare,
+  FileText,
+  Clapperboard,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -28,7 +31,10 @@ type BadgeKey =
   | "creators"
   | "atRisk"
   | "queuedPayouts"
-  | "webhooks";
+  | "webhooks"
+  | "openTasks"
+  | "posts"
+  | "templates";
 
 const NAV: {
   href: string;
@@ -40,6 +46,14 @@ const NAV: {
   { href: "/outreach", label: "Outreach", icon: Radar, badge: "callBooked" },
   { href: "/crm", label: "CRM", icon: GitBranch, badge: "creators" },
   { href: "/roster", label: "Roster", icon: Users, badge: "atRisk" },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare, badge: "openTasks" },
+  { href: "/content", label: "Content", icon: Clapperboard, badge: "posts" },
+  {
+    href: "/templates",
+    label: "Templates",
+    icon: FileText,
+    badge: "templates",
+  },
   {
     href: "/financials",
     label: "Financials",

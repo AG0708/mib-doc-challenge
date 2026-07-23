@@ -46,7 +46,7 @@ export async function GET(req: Request) {
       id: c.id,
       title: c.name,
       subtitle: `${c.handle} · ${c.stage}`,
-      href: "/crm",
+      href: `/creators/${c.id}`,
     }));
 
   const payoutHits = db

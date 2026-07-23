@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/db";
-import { creators, payouts, prospects, webhookEvents } from "@/db/schema";
+import {
+  contentPosts,
+  creators,
+  messageTemplates,
+  payouts,
+  prospects,
+  tasks,
+  webhookEvents,
+} from "@/db/schema";
 
 export const runtime = "nodejs";
 
@@ -10,6 +18,9 @@ export async function GET() {
   const allCreators = db.select().from(creators).all();
   const allPayouts = db.select().from(payouts).all();
   const allWebhooks = db.select().from(webhookEvents).all();
+  const allTasks = db.select().from(tasks).all();
+  const allPosts = db.select().from(contentPosts).all();
+  const allTemplates = db.select().from(messageTemplates).all();
 
   return NextResponse.json({
     data: {
@@ -24,6 +35,9 @@ export async function GET() {
       atRisk: allCreators.filter((c) =>
         ["watch", "at_risk"].includes(c.standing),
       ).length,
+      openTasks: allTasks.filter((t) => t.status === "open").length,
+      posts: allPosts.length,
+      templates: allTemplates.length,
       dbPath: process.env.RELAY_DB_PATH ?? "data/relay.db",
       webhookSecretConfigured: Boolean(process.env.RELAY_WEBHOOK_SECRET),
     },

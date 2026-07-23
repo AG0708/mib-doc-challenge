@@ -57,6 +57,56 @@ export function useSearch(q: string) {
   });
 }
 
+export function useTasks(query = "") {
+  return useSWR<{ data: TaskRow[] }>(`/api/tasks${query}`, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
+}
+
+export function useNotes(query = "") {
+  return useSWR<{ data: NoteRow[] }>(`/api/notes${query}`, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
+}
+
+export function usePosts(query = "") {
+  return useSWR<{ data: PostRow[] }>(`/api/posts${query}`, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
+}
+
+export function useTemplates() {
+  return useSWR<{ data: TemplateRow[] }>("/api/templates", fetcher, {
+    refreshInterval: 15000,
+    keepPreviousData: true,
+  });
+}
+
+export function useAlerts() {
+  return useSWR<{ data: AlertRow[] }>("/api/alerts", fetcher, {
+    refreshInterval: 10000,
+    keepPreviousData: true,
+  });
+}
+
+export function useCreatorDetail(id: string | null) {
+  return useSWR<{
+    data: {
+      creator: CreatorRow;
+      notes: NoteRow[];
+      posts: PostRow[];
+      tasks: TaskRow[];
+      payouts: PayoutRow[];
+    };
+  }>(id ? `/api/creators/${id}` : null, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
+}
+
 export async function revalidateOps() {
   await Promise.all([
     globalMutate((k) => typeof k === "string" && k.startsWith("/api/")),
@@ -79,8 +129,64 @@ export type StatsPayload = {
   webhooks: number;
   callBooked: number;
   atRisk: number;
+  openTasks: number;
+  posts: number;
+  templates: number;
   dbPath: string;
   webhookSecretConfigured: boolean;
+};
+
+export type TaskRow = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueAt: string | null;
+  assignee: string;
+  entityType: string | null;
+  entityId: string | null;
+  entityLabel: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NoteRow = {
+  id: string;
+  entityType: string;
+  entityId: string;
+  author: string;
+  body: string;
+  createdAt: string;
+};
+
+export type PostRow = {
+  id: string;
+  creatorId: string;
+  platform: string;
+  url: string;
+  caption: string;
+  views: number;
+  installs: number;
+  postedAt: string;
+  createdAt: string;
+  creatorName?: string;
+  creatorHandle?: string;
+};
+
+export type TemplateRow = {
+  id: string;
+  name: string;
+  channel: string;
+  body: string;
+  updatedAt: string;
+};
+
+export type AlertRow = {
+  id: string;
+  severity: "high" | "med" | "low";
+  title: string;
+  detail: string;
+  href: string;
 };
 
 export type ProspectRow = {

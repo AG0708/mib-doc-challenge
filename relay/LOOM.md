@@ -24,14 +24,17 @@ Point at Live DB badge + KPIs.
 ### 0:45 — Attribution (Pulse)
 Views → installs → web visits → revenue. Refresh proves `/api/metrics`.
 
-### 1:20 — Outreach
-Drag a prospect or Book call. Say: “PATCH `/api/prospects` — persists to SQLite.”
+### 1:10 — Outreach
+Drag a prospect or Book call. Optional: bulk-select + Import CSV. Say: “PATCH `/api/prospects` — persists to SQLite.”
 
-### 2:00 — CRM
-Advance a creator stage. Mention deep link + webhook sync.
+### 1:50 — CRM → Creator profile
+Advance a stage, then open **Full profile**. Add a note / log a post — cadence updates.
 
-### 2:40 — Roster / Financials
-Change standing or Mark paid. Show it sticks after refresh.
+### 2:25 — Tasks / Content / Templates (pick one)
+Show the ops queue, content ledger, or template compose. Counts in the nav come from `/api/stats`.
+
+### 2:55 — Financials
+Mark paid. Show it sticks after refresh.
 
 ### 3:20 — Systems (close)
 Architecture: UI → /api → DB.  

@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useMetrics } from "@/lib/api";
+import { useAlerts, useMetrics } from "@/lib/api";
 import { formatCompact, formatUsd, pct } from "@/lib/utils";
 import {
   PageHeader,
@@ -31,7 +31,9 @@ import {
 export default function PulsePage() {
   const [days, setDays] = useState(30);
   const { data, isLoading, error, mutate } = useMetrics(days);
+  const { data: alertsData } = useAlerts();
   const payload = data?.data;
+  const alerts = alertsData?.data ?? [];
 
   if (error) {
     return <Empty label="Failed to load metrics from DB. Is the API up?" />;
@@ -106,6 +108,41 @@ export default function PulsePage() {
           </>
         )}
       </div>
+
+      {alerts.length > 0 && (
+        <section className="card mb-4 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Ops alerts</h2>
+            <span className="mono text-xs text-muted">{alerts.length}</span>
+          </div>
+          <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {alerts.slice(0, 6).map((a) => (
+              <li key={a.id}>
+                <Link
+                  href={a.href}
+                  className="block rounded-lg border border-line bg-bg px-3 py-2.5 transition hover:border-ink/20"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      tone={
+                        a.severity === "high"
+                          ? "heat"
+                          : a.severity === "med"
+                            ? "amber"
+                            : "neutral"
+                      }
+                    >
+                      {a.severity}
+                    </Badge>
+                    <p className="truncate text-sm font-medium">{a.title}</p>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-muted">{a.detail}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mb-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <section className="card p-4">

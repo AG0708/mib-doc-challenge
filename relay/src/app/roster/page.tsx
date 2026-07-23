@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { mutate as globalMutate } from "swr";
 import { useCreators } from "@/lib/api";
 import { api, cn, formatCompact, formatUsd } from "@/lib/utils";
@@ -110,7 +111,12 @@ export default function RosterPage() {
                   <Avatar name={c.name} />
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-semibold">{c.name}</h3>
+                      <Link
+                        href={`/creators/${c.id}`}
+                        className="font-semibold hover:text-signal"
+                      >
+                        {c.name}
+                      </Link>
                       <Badge
                         tone={
                           STANDING_TONE[
@@ -176,6 +182,12 @@ export default function RosterPage() {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
+                <Link
+                  href={`/creators/${c.id}`}
+                  className="rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-bg"
+                >
+                  Open
+                </Link>
                 {(["elite", "strong", "watch", "at_risk"] as const).map((s) => (
                   <Button
                     key={s}

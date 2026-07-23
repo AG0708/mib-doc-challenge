@@ -142,6 +142,49 @@ function migrate(sqlite: Database.Database) {
       week_delta REAL NOT NULL,
       top_hook TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      priority TEXT NOT NULL DEFAULT 'med',
+      due_at TEXT,
+      assignee TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id TEXT,
+      entity_label TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS entity_notes (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      author TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS content_posts (
+      id TEXT PRIMARY KEY,
+      creator_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      url TEXT NOT NULL DEFAULT '',
+      caption TEXT NOT NULL DEFAULT '',
+      views INTEGER NOT NULL DEFAULT 0,
+      installs INTEGER NOT NULL DEFAULT 0,
+      posted_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS message_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'dm',
+      body TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { mutate as globalMutate } from "swr";
 import { CRM_STAGES, TEAM } from "@/data/seed";
 import { useCreators } from "@/lib/api";
@@ -207,6 +208,12 @@ export default function CrmPage() {
               </div>
             </dl>
             <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href={`/creators/${active.id}`}
+                className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium hover:bg-bg"
+              >
+                Full profile
+              </Link>
               <Button tone="signal" onClick={() => advance(active.id, "first_post")}>
                 Mark first post
               </Button>
