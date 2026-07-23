@@ -1,0 +1,333 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { mutate as globalMutate } from "swr";
+import { CRM_STAGES } from "@/data/seed";
+import { useCreators, useTeam } from "@/lib/api";
+import { api, cn, formatCompact, formatUsd } from "@/lib/utils";
+import { formatRelative, dateOnly } from "@/lib/time";
+import { useToast } from "@/components/ui/ToastProvider";
+import {
+  PageHeader,
+  Badge,
+  Button,
+  Field,
+  Select,
+  Avatar,
+  Empty,
+} from "@/components/ui/primitives";
+
+const STAGE_TONE: Record<string, "neutral" | "signal" | "heat" | "amber" | "ink"> = {
+  signed: "neutral",
+  onboarding: "amber",
+  first_post: "signal",
+  live: "ink",
+  paused: "heat",
+  churned: "heat",
+};
+
+export default function CrmPage() {
+  const { push } = useToast();
+  const { data: teamData } = useTeam();
+  const team = teamData?.data ?? [];
+  const [q, setQ] = useState("");
+  const [manager, setManager] = useState("all");
+  const [stage, setStage] = useState("all");
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    handle: "",
+    platform: "tiktok",
+    manager: "Ava",
+    city: "",
+  });
+  const query = `?q=${encodeURIComponent(q)}&manager=${manager}&stage=${stage}`;
+  const { data, isLoading, mutate } = useCreators(query);
+  const rows = data?.data ?? [];
+  const { data: allData } = useCreators("");
+  const all = allData?.data ?? [];
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const active = rows.find((c) => c.id === activeId) ?? rows[0] ?? null;
+
+  const funnel = CRM_STAGES.map((s) => ({
+    ...s,
+    count: all.filter((c) => c.stage === s.id).length,
+  }));
+
+  async function patch(id: string, body: Record<string, unknown>) {
+    await api("/api/creators", {
+      method: "PATCH",
+      body: JSON.stringify({ id, ...body }),
+    });
+    await mutate();
+    await globalMutate("/api/creators");
+    await globalMutate("/api/activity");
+    await globalMutate((k) => typeof k === "string" && k.startsWith("/api/metrics"));
+  }
+
+  async function advance(id: string, next: string) {
+    await patch(id, { stage: next });
+    setActiveId(id);
+    push({ title: "CRM updated", detail: next.replaceAll("_", " "), tone: "ok" });
+  }
+
+  async function createCreator(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await api<{ data: { id: string } }>("/api/creators", {
+      method: "POST",
+      body: JSON.stringify(form),
+    });
+    setShowAdd(false);
+    setForm({
+      name: "",
+      handle: "",
+      platform: "tiktok",
+      manager: "Ava",
+      city: "",
+    });
+    await mutate();
+    await globalMutate("/api/creators");
+    await globalMutate("/api/stats");
+    setActiveId(res.data.id);
+    push({ title: "Creator added", tone: "ok" });
+  }
+
+  return (
+    <div className="animate-rise">
+      <PageHeader
+        title="CRM"
+        description="Creator onboarding pipeline — stage changes write to SQLite and activity."
+        action={
+          <Button size="sm" tone="ink" onClick={() => setShowAdd((v) => !v)}>
+            Add creator
+          </Button>
+        }
+      />
+
+      <div className="mb-2.5 grid grid-cols-3 gap-px overflow-hidden rounded-[8px] border border-line bg-line md:grid-cols-6">
+        {funnel.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setStage((cur) => (cur === s.id ? "all" : s.id))}
+            className={cn(
+              "bg-white px-2.5 py-2 text-left hover:bg-[#f8fafc]",
+              stage === s.id && "bg-ink text-white hover:bg-ink",
+            )}
+          >
+            <p
+              className={cn(
+                "text-[10px] font-semibold uppercase tracking-[0.08em]",
+                stage === s.id ? "text-white/65" : "text-muted",
+              )}
+            >
+              {s.label}
+            </p>
+            <p className="mono mt-0.5 text-lg font-semibold">{s.count}</p>
+          </button>
+        ))}
+      </div>
+
+      {showAdd && (
+        <form onSubmit={createCreator} className="card mb-2.5 grid gap-2 p-4 sm:grid-cols-3">
+          <Field
+            required
+            placeholder="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <Field
+            required
+            placeholder="@handle"
+            value={form.handle}
+            onChange={(e) => setForm({ ...form, handle: e.target.value })}
+          />
+          <Select
+            value={form.platform}
+            onChange={(e) => setForm({ ...form, platform: e.target.value })}
+          >
+            <option value="tiktok">TikTok</option>
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+          </Select>
+          <Select
+            value={form.manager}
+            onChange={(e) => setForm({ ...form, manager: e.target.value })}
+          >
+            {team.map((t) => (
+              <option key={t.id} value={t.name}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+          <Field
+            placeholder="City"
+            value={form.city}
+            onChange={(e) => setForm({ ...form, city: e.target.value })}
+          />
+          <Button type="submit" tone="signal">
+            Create in DB
+          </Button>
+        </form>
+      )}
+
+      <div className="mb-2.5 flex flex-wrap gap-2">
+        <Field
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search creators…"
+          className="max-w-xs"
+        />
+        <Select value={manager} onChange={(e) => setManager(e.target.value)}>
+          <option value="all">All managers</option>
+          {team.map((t) => (
+            <option key={t.id} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+
+      {isLoading && <Empty label="Loading creators from DB…" />}
+
+      <div className="grid gap-2.5 xl:grid-cols-[1.35fr_0.9fr]">
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="dense-table min-w-[680px] text-[12px]">
+              <thead>
+                <tr>
+                  <th>Creator</th>
+                  <th>Stage</th>
+                  <th>Manager</th>
+                  <th>Views</th>
+                  <th>Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr
+                    key={c.id}
+                    onClick={() => setActiveId(c.id)}
+                    className={cn(
+                      "cursor-pointer border-b border-line hover:bg-bg",
+                      active?.id === c.id && "bg-signal-soft/50",
+                    )}
+                  >
+                    <td className="px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <Avatar name={c.name} size="sm" />
+                        <div>
+                          <p className="font-medium">{c.name}</p>
+                          <p className="text-xs text-muted">{c.handle}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      <Badge tone={STAGE_TONE[c.stage] ?? "neutral"}>
+                        {CRM_STAGES.find((s) => s.id === c.stage)?.label ??
+                          c.stage}
+                      </Badge>
+                    </td>
+                    <td className="px-2.5 py-1.5 text-ink-soft">{c.manager}</td>
+                    <td className="mono px-2.5 py-1.5">
+                      {formatCompact(c.views30d)}
+                    </td>
+                    <td className="mono px-2.5 py-1.5 text-muted">
+                      {dateOnly(c.joinedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {active && (
+          <aside className="card p-2.5">
+            <div className="flex items-start gap-3">
+              <Avatar name={active.name} />
+              <div>
+                <h3 className="text-[15px] font-semibold">{active.name}</h3>
+                <p className="text-sm text-muted">
+                  {active.handle} · {active.city} · {active.platform}
+                </p>
+                <p className="mono mt-1 text-[11px] text-muted">
+                  {active.email}
+                </p>
+              </div>
+            </div>
+            <a
+              href={active.deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 block truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs text-signal"
+            >
+              {active.deepLink}
+            </a>
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Standing</dt>
+                <dd className="mt-0.5 font-semibold capitalize">
+                  {active.standing.replace("_", " ")}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Revenue 30d</dt>
+                <dd className="mono mt-0.5 font-semibold">
+                  {formatUsd(active.revenue30d)}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Last post</dt>
+                <dd className="mono mt-0.5 font-semibold">
+                  {active.lastPostAt
+                    ? formatRelative(active.lastPostAt)
+                    : "—"}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-line bg-bg p-2.5">
+                <dt className="text-xs text-muted">Rate</dt>
+                <dd className="mt-0.5 font-semibold">{active.rate}</dd>
+              </div>
+            </dl>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link
+                href={`/creators/${active.id}`}
+                className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-2.5 py-1.5 text-sm font-medium hover:bg-bg"
+              >
+                Full profile
+              </Link>
+              <Button tone="signal" onClick={() => advance(active.id, "first_post")}>
+                Mark first post
+              </Button>
+              <Button tone="ink" onClick={() => advance(active.id, "live")}>
+                Go live
+              </Button>
+            </div>
+            <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+              Move stage
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {CRM_STAGES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => advance(active.id, s.id)}
+                  className={cn(
+                    "rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em]",
+                    active.stage === s.id
+                      ? "border-ink bg-ink text-white"
+                      : "border-line bg-white",
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}
