@@ -19,6 +19,7 @@ import { LoomTour } from "@/components/loom/LoomTour";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { ToastStack } from "@/components/ui/ToastStack";
 import { OpsProvider } from "@/lib/ops-store";
+import { LiveProvider } from "@/lib/live-store";
 
 const NAV = [
   { href: "/", label: "Pulse", icon: LayoutDashboard },
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <OpsProvider>
+      <LiveProvider>
       <div className="relative z-10 mx-auto flex min-h-screen max-w-[1480px] flex-col px-4 pb-28 pt-4 md:px-6 lg:flex-row lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
           <button
@@ -130,6 +132,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <LoomTour />
         <ToastStack />
       </div>
+      </LiveProvider>
     </OpsProvider>
   );
 }

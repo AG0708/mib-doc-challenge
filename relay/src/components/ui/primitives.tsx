@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 const AVATAR_TONES = [
   "bg-[#0fb981]/20 text-[#0a8f63]",
@@ -149,13 +150,17 @@ export function PageHeader({
 export function StatBlock({
   label,
   value,
+  numericValue,
+  valueFormat = "compact",
   delta,
   hint,
   delay = 0,
   spark,
 }: {
   label: string;
-  value: string;
+  value?: string;
+  numericValue?: number;
+  valueFormat?: "compact" | "usd" | "raw" | "pct";
   delta?: string;
   hint?: string;
   delay?: number;
@@ -172,7 +177,11 @@ export function StatBlock({
         {label}
       </p>
       <p className="mono mt-3 text-3xl font-semibold tracking-tight text-ink md:text-4xl">
-        {value}
+        {typeof numericValue === "number" ? (
+          <AnimatedNumber value={numericValue} format={valueFormat} />
+        ) : (
+          value
+        )}
       </p>
       <div className="mt-2 flex items-center gap-2 text-sm">
         {delta && (

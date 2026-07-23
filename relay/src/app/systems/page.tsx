@@ -1,4 +1,5 @@
 import { PageHeader, SectionTitle, Badge, Button } from "@/components/ui/primitives";
+import { ArchitectureMap } from "@/components/systems/ArchitectureMap";
 import Link from "next/link";
 
 const ENTITIES = [
@@ -65,6 +66,10 @@ export default function SystemsPage() {
           </Link>
         }
       />
+
+      <div className="mb-5 animate-rise">
+        <ArchitectureMap />
+      </div>
 
       <section className="panel animate-rise mb-5 rounded-2xl p-5">
         <SectionTitle title="Build process (AI-native)" />

@@ -9,7 +9,8 @@ cd relay && npm run dev
 ```
 
 1. Open `http://localhost:3000` at **1440×900** (or similar).
-2. Leave the **Loom teleprompter** open (bottom-right). It auto-tracks the route.
+2. Leave the **Loom teleprompter** open (bottom-right). Optional: hit **Play demo** for autoplay, or drive manually.
+3. On Pulse, leave **Live** on so the ticker streams during your open.
 3. Close Slack/email noise. Speak to camera 20–30% of the time; screen the rest.
 4. Target **~4:00**. Hard stop at 5:00.
 
