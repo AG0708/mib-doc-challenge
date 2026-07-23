@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { eq, desc } from "drizzle-orm";
+import { z } from "zod";
 import { getDb } from "@/db";
 import {
   activity,
@@ -6,7 +8,6 @@ import {
   creators,
   dailyMetrics,
 } from "@/db/schema";
-import { desc } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -67,4 +68,61 @@ export async function GET(req: Request) {
       activity: feed,
     },
   });
+}
+
+const UpsertSchema = z.object({
+  date: z.string().min(8),
+  views: z.number().int().nonnegative(),
+  installs: z.number().int().nonnegative(),
+  webVisits: z.number().int().nonnegative(),
+  revenue: z.number().int().nonnegative(),
+});
+
+export async function PUT(req: Request) {
+  const body = UpsertSchema.parse(await req.json());
+  const db = getDb();
+  const existing = db
+    .select()
+    .from(dailyMetrics)
+    .where(eq(dailyMetrics.date, body.date))
+    .get();
+
+  if (existing) {
+    db.update(dailyMetrics)
+      .set({
+        views: body.views,
+        installs: body.installs,
+        webVisits: body.webVisits,
+        revenue: body.revenue,
+      })
+      .where(eq(dailyMetrics.date, body.date))
+      .run();
+  } else {
+    db.insert(dailyMetrics)
+      .values({
+        date: body.date,
+        views: body.views,
+        installs: body.installs,
+        webVisits: body.webVisits,
+        revenue: body.revenue,
+      })
+      .run();
+  }
+
+  db.insert(activity)
+    .values({
+      id: `a_${Math.random().toString(36).slice(2, 9)}`,
+      at: new Date().toISOString(),
+      kind: "alert",
+      title: "Daily metrics ingested",
+      detail: `${body.date} · ${body.views} views · $${body.revenue}`,
+    })
+    .run();
+
+  const row = db
+    .select()
+    .from(dailyMetrics)
+    .where(eq(dailyMetrics.date, body.date))
+    .get();
+  return NextResponse.json({ data: row });
 }

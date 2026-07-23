@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { activity, creators, webhookEvents } from "@/db/schema";
+import { activity, creators, tasks, webhookEvents } from "@/db/schema";
 import { STEP_TO_STAGE } from "@/data/seed";
 
 export const runtime = "nodejs";
@@ -23,6 +23,7 @@ function verify(signature: string | null, body: string) {
 export async function GET() {
   return NextResponse.json({
     endpoint: "/api/webhooks/onboarding",
+    simulate: "/api/webhooks/onboarding/simulate",
     auth: "X-Relay-Signature: sha256=<hmac>",
     secret_env: "RELAY_WEBHOOK_SECRET",
   });
@@ -90,15 +91,63 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "missing_fields" }, { status: 422 });
   }
 
+  const creator = db
+    .select()
+    .from(creators)
+    .where(eq(creators.id, payload.creator_id))
+    .get();
+  if (!creator) {
+    db.insert(webhookEvents)
+      .values({
+        id: `wh_${Math.random().toString(36).slice(2, 9)}`,
+        at: now,
+        source: "web_onboarding",
+        event: payload.event,
+        creatorId: payload.creator_id,
+        step: payload.step ?? null,
+        signatureValid: true,
+        status: "rejected",
+        idempotencyKey: idem,
+        raw: body,
+      })
+      .run();
+    return NextResponse.json(
+      { ok: false, error: "creator_not_found" },
+      { status: 404 },
+    );
+  }
+
   const stage =
     payload.step && STEP_TO_STAGE[payload.step]
       ? STEP_TO_STAGE[payload.step]
       : null;
 
   if (stage) {
+    const patch: Record<string, unknown> = { stage, updatedAt: now };
+    if (stage === "live" && creator.standing === "watch") {
+      patch.standing = "strong";
+    }
     db.update(creators)
-      .set({ stage, updatedAt: now })
+      .set(patch)
       .where(eq(creators.id, payload.creator_id))
+      .run();
+  }
+
+  if (payload.step === "go_live") {
+    db.insert(tasks)
+      .values({
+        id: `t_${Math.random().toString(36).slice(2, 9)}`,
+        title: `Welcome kit + first brief for ${creator.name}`,
+        status: "open",
+        priority: "high",
+        dueAt: new Date(Date.now() + 2 * 86400000).toISOString(),
+        assignee: creator.manager,
+        entityType: "creator",
+        entityId: creator.id,
+        entityLabel: creator.name,
+        createdAt: now,
+        updatedAt: now,
+      })
       .run();
   }
 
@@ -124,7 +173,7 @@ export async function POST(req: Request) {
       at: now,
       kind: "crm",
       title: `Webhook ${payload.step ?? payload.event}`,
-      detail: `${payload.creator_id} applied${stage ? ` → ${stage}` : ""}`,
+      detail: `${creator.name} applied${stage ? ` → ${stage}` : ""}`,
     })
     .run();
 
@@ -133,6 +182,7 @@ export async function POST(req: Request) {
     applied: {
       id,
       creator_id: payload.creator_id,
+      creator_name: creator.name,
       step: payload.step ?? null,
       stage,
       received_at: now,

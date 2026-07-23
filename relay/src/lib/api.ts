@@ -107,6 +107,24 @@ export function useCreatorDetail(id: string | null) {
   });
 }
 
+export function useMe() {
+  return useSWR<{ data: MePayload }>("/api/me", fetcher, {
+    refreshInterval: 30000,
+  });
+}
+
+export function useTeam() {
+  return useSWR<{ data: TeamMemberRow[] }>("/api/team", fetcher, {
+    refreshInterval: 30000,
+  });
+}
+
+export function useHealth() {
+  return useSWR<{ data: HealthPayload }>("/api/health", fetcher, {
+    refreshInterval: 15000,
+  });
+}
+
 export async function revalidateOps() {
   await Promise.all([
     globalMutate((k) => typeof k === "string" && k.startsWith("/api/")),
@@ -187,6 +205,32 @@ export type AlertRow = {
   title: string;
   detail: string;
   href: string;
+};
+
+export type MePayload = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  workspaceName: string;
+};
+
+export type TeamMemberRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  isOperator: boolean;
+};
+
+export type HealthPayload = {
+  ok: boolean;
+  driver: string;
+  journalMode: unknown;
+  tables: Record<string, number>;
+  connected: boolean;
 };
 
 export type ProspectRow = {

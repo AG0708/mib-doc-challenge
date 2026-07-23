@@ -139,6 +139,22 @@ create table if not exists message_templates (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists team_members (
+  id text primary key,
+  name text not null,
+  email text not null,
+  role text not null default 'Creator Ops',
+  team text not null default 'Growth',
+  is_operator boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists workspace_settings (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz not null default now()
+);
+
 alter table prospects enable row level security;
 alter table creators enable row level security;
 alter table payouts enable row level security;
@@ -163,3 +179,7 @@ create policy "ops_all_tasks" on tasks for all using (true) with check (true);
 create policy "ops_all_notes" on entity_notes for all using (true) with check (true);
 create policy "ops_all_posts" on content_posts for all using (true) with check (true);
 create policy "ops_all_templates" on message_templates for all using (true) with check (true);
+alter table team_members enable row level security;
+alter table workspace_settings enable row level security;
+create policy "ops_all_team" on team_members for all using (true) with check (true);
+create policy "ops_all_workspace" on workspace_settings for all using (true) with check (true);

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { mutate as globalMutate } from "swr";
-import { CRM_STAGES, TEAM } from "@/data/seed";
-import { useCreators } from "@/lib/api";
+import { CRM_STAGES } from "@/data/seed";
+import { useCreators, useTeam } from "@/lib/api";
 import { api, cn, formatCompact, formatUsd } from "@/lib/utils";
 import { formatRelative, dateOnly } from "@/lib/time";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -29,9 +29,19 @@ const STAGE_TONE: Record<string, "neutral" | "signal" | "heat" | "amber" | "ink"
 
 export default function CrmPage() {
   const { push } = useToast();
+  const { data: teamData } = useTeam();
+  const team = teamData?.data ?? [];
   const [q, setQ] = useState("");
   const [manager, setManager] = useState("all");
   const [stage, setStage] = useState("all");
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    handle: "",
+    platform: "tiktok",
+    manager: "Ava",
+    city: "",
+  });
   const query = `?q=${encodeURIComponent(q)}&manager=${manager}&stage=${stage}`;
   const { data, isLoading, mutate } = useCreators(query);
   const rows = data?.data ?? [];
@@ -62,11 +72,37 @@ export default function CrmPage() {
     push({ title: "CRM updated", detail: next.replaceAll("_", " "), tone: "ok" });
   }
 
+  async function createCreator(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await api<{ data: { id: string } }>("/api/creators", {
+      method: "POST",
+      body: JSON.stringify(form),
+    });
+    setShowAdd(false);
+    setForm({
+      name: "",
+      handle: "",
+      platform: "tiktok",
+      manager: "Ava",
+      city: "",
+    });
+    await mutate();
+    await globalMutate("/api/creators");
+    await globalMutate("/api/stats");
+    setActiveId(res.data.id);
+    push({ title: "Creator added", tone: "ok" });
+  }
+
   return (
     <div className="animate-rise">
       <PageHeader
         title="CRM"
         description="Onboarding pipeline backed by the creators table. Stage changes persist and fan out to activity."
+        action={
+          <Button tone="ink" onClick={() => setShowAdd((v) => !v)}>
+            Add creator
+          </Button>
+        }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
@@ -88,6 +124,49 @@ export default function CrmPage() {
         ))}
       </div>
 
+      {showAdd && (
+        <form onSubmit={createCreator} className="card mb-4 grid gap-2 p-4 sm:grid-cols-3">
+          <Field
+            required
+            placeholder="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <Field
+            required
+            placeholder="@handle"
+            value={form.handle}
+            onChange={(e) => setForm({ ...form, handle: e.target.value })}
+          />
+          <Select
+            value={form.platform}
+            onChange={(e) => setForm({ ...form, platform: e.target.value })}
+          >
+            <option value="tiktok">TikTok</option>
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+          </Select>
+          <Select
+            value={form.manager}
+            onChange={(e) => setForm({ ...form, manager: e.target.value })}
+          >
+            {team.map((t) => (
+              <option key={t.id} value={t.name}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+          <Field
+            placeholder="City"
+            value={form.city}
+            onChange={(e) => setForm({ ...form, city: e.target.value })}
+          />
+          <Button type="submit" tone="signal">
+            Create in DB
+          </Button>
+        </form>
+      )}
+
       <div className="mb-4 flex flex-wrap gap-2">
         <Field
           value={q}
@@ -97,9 +176,9 @@ export default function CrmPage() {
         />
         <Select value={manager} onChange={(e) => setManager(e.target.value)}>
           <option value="all">All managers</option>
-          {TEAM.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          {team.map((t) => (
+            <option key={t.id} value={t.name}>
+              {t.name}
             </option>
           ))}
         </Select>

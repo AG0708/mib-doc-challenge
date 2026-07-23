@@ -90,3 +90,12 @@ export async function PATCH(req: Request) {
     .get();
   return NextResponse.json({ data: row });
 }
+
+export async function DELETE(req: Request) {
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+  getDb().delete(messageTemplates).where(eq(messageTemplates.id, id)).run();
+  return NextResponse.json({ data: { ok: true } });
+}

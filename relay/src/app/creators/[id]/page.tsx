@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { mutate as globalMutate } from "swr";
-import { useCreatorDetail } from "@/lib/api";
+import { useCreatorDetail, useMe } from "@/lib/api";
 import { api, formatCompact, formatUsd } from "@/lib/utils";
 import { formatRelative, dateOnly } from "@/lib/time";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -25,6 +25,7 @@ export default function CreatorDetailPage({
 }) {
   const { id } = use(params);
   const { push } = useToast();
+  const { data: meData } = useMe();
   const { data, isLoading, mutate } = useCreatorDetail(id);
   const payload = data?.data;
   const creator = payload?.creator;
@@ -52,7 +53,7 @@ export default function CreatorDetailPage({
         entityType: "creator",
         entityId: id,
         body: note,
-        author: "Ava",
+        author: meData?.data?.name ?? "Ops",
       }),
     });
     setNote("");

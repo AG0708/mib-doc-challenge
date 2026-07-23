@@ -21,10 +21,9 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ToastProvider } from "@/components/ui/ToastProvider";
 import { CommandPalette } from "@/components/command/CommandPalette";
-import { useActivity, useStats } from "@/lib/api";
+import { useActivity, useMe, useStats } from "@/lib/api";
 import { formatRelative } from "@/lib/time";
 import { Avatar, Badge } from "@/components/ui/primitives";
-import { CURRENT_USER } from "@/data/types";
 
 type BadgeKey =
   | "callBooked"
@@ -70,8 +69,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [inbox, setInbox] = useState(false);
   const { data } = useActivity();
   const { data: statsData } = useStats();
+  const { data: meData } = useMe();
   const feed = data?.data.activity ?? [];
   const stats = statsData?.data;
+  const me = meData?.data;
 
   return (
     <ToastProvider>
@@ -132,13 +133,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="border-t border-white/10 p-3">
             <div className="flex items-center gap-2 rounded-lg bg-white/5 px-2 py-2">
-              <Avatar name={CURRENT_USER.name} size="sm" />
+              <Avatar name={me?.name ?? "Ops"} size="sm" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">
-                  {CURRENT_USER.name}
+                  {me?.name ?? "Ops"}
                 </p>
                 <p className="truncate text-[11px] text-sidebar-muted">
-                  {CURRENT_USER.role}
+                  {me?.role ?? "Creator Ops"}
                 </p>
               </div>
             </div>

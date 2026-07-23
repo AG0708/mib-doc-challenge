@@ -135,3 +135,19 @@ export const messageTemplates = sqliteTable("message_templates", {
   body: text("body").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const teamMembers = sqliteTable("team_members", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("Creator Ops"),
+  team: text("team").notNull().default("Growth"),
+  isOperator: integer("is_operator", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const workspaceSettings = sqliteTable("workspace_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

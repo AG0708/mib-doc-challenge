@@ -67,3 +67,65 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ data: row });
 }
+
+const CreateSchema = z.object({
+  name: z.string().min(1),
+  handle: z.string().min(1),
+  platform: z.enum(["tiktok", "instagram", "youtube"]),
+  manager: z.string(),
+  email: z.string().optional(),
+  city: z.string().optional(),
+  rate: z.string().optional(),
+  stage: z.string().optional(),
+});
+
+export async function POST(req: Request) {
+  const body = CreateSchema.parse(await req.json());
+  const db = getDb();
+  const now = new Date().toISOString();
+  const id = `c_${Math.random().toString(36).slice(2, 9)}`;
+  const handle = body.handle.startsWith("@") ? body.handle : `@${body.handle}`;
+  const slug = handle.replace(/^@/, "").toLowerCase();
+
+  db.insert(creators)
+    .values({
+      id,
+      name: body.name,
+      handle,
+      platform: body.platform,
+      stage: body.stage ?? "signed",
+      standing: "watch",
+      cpm: 0,
+      views30d: 0,
+      installs30d: 0,
+      webVisits30d: 0,
+      revenue30d: 0,
+      postsDue: 4,
+      postsDone: 0,
+      nextPayout: 0,
+      rate: body.rate ?? "Rev-share pilot",
+      joinedAt: now.slice(0, 10),
+      manager: body.manager,
+      lastPostAt: null,
+      city: body.city ?? "",
+      email: body.email ?? `${slug}@creators.relay`,
+      deepLink: `https://sherlock.app/c/${slug}`,
+      timezone: "America/New_York",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+
+  db.insert(activity)
+    .values({
+      id: `a_${Math.random().toString(36).slice(2, 9)}`,
+      at: now,
+      kind: "crm",
+      title: `${body.name} added to CRM`,
+      detail: `${handle} · signed`,
+    })
+    .run();
+
+  const row = db.select().from(creators).where(eq(creators.id, id)).get();
+  return NextResponse.json({ data: row }, { status: 201 });
+}

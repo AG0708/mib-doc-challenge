@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { mutate as globalMutate } from "swr";
-import { TEAM } from "@/data/seed";
-import { useTasks, type TaskRow } from "@/lib/api";
+import { useMe, useTasks, useTeam, type TaskRow } from "@/lib/api";
 import { api, cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/time";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -26,6 +25,9 @@ const PRIORITY_TONE = {
 
 export default function TasksPage() {
   const { push } = useToast();
+  const { data: teamData } = useTeam();
+  const { data: meData } = useMe();
+  const team = teamData?.data ?? [];
   const [status, setStatus] = useState("open");
   const [assignee, setAssignee] = useState("all");
   const query = `?status=${status}&assignee=${assignee}`;
@@ -60,11 +62,16 @@ export default function TasksPage() {
       body: JSON.stringify({
         title: form.title,
         priority: form.priority,
-        assignee: form.assignee,
+        assignee: form.assignee || meData?.data?.name || "Ava",
         dueAt: form.dueAt || new Date(Date.now() + 86400000).toISOString(),
       }),
     });
-    setForm({ title: "", priority: "med", assignee: "Ava", dueAt: "" });
+    setForm({
+      title: "",
+      priority: "med",
+      assignee: meData?.data?.name ?? "Ava",
+      dueAt: "",
+    });
     await mutate();
     await globalMutate("/api/activity");
     await globalMutate("/api/stats");
@@ -100,9 +107,9 @@ export default function TasksPage() {
               onChange={(e) => setAssignee(e.target.value)}
             >
               <option value="all">All assignees</option>
-              {TEAM.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {team.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
                 </option>
               ))}
             </Select>
@@ -144,9 +151,9 @@ export default function TasksPage() {
             value={form.assignee}
             onChange={(e) => setForm({ ...form, assignee: e.target.value })}
           >
-            {TEAM.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {team.map((t) => (
+              <option key={t.id} value={t.name}>
+                {t.name}
               </option>
             ))}
           </Select>

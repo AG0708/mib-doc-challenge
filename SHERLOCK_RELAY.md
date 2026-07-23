@@ -2,7 +2,7 @@
 
 `relay/` is a Next.js creator command center demo for the Sherlock **Internal Tools / Beige** hire.
 
-**Surfaces:** Pulse (alerts), Outreach (bulk + CSV + templates), CRM, Roster, Tasks, Content, Templates, Financials, Systems (HMAC webhooks), creator profiles.
+**Fully connected backend:** every surface reads/writes SQLite via `/api/*` (Drizzle). Convert prospect→creator, generate payouts, ingest metrics, server-signed webhook simulate, team/operator from DB. No client fake stores.
 
 **For the application Loom:** see `relay/LOOM.md` (3–5 min script).
 

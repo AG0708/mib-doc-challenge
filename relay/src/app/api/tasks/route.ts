@@ -108,3 +108,12 @@ export async function PATCH(req: Request) {
   const row = db.select().from(tasks).where(eq(tasks.id, body.id)).get();
   return NextResponse.json({ data: row });
 }
+
+export async function DELETE(req: Request) {
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+  getDb().delete(tasks).where(eq(tasks.id, id)).run();
+  return NextResponse.json({ data: { ok: true } });
+}

@@ -122,6 +122,26 @@ export default function FinancialsPage() {
               Export CSV
             </Button>
             <Button
+              tone="signal"
+              onClick={async () => {
+                const res = await api<{ data: { created: number; period: string } }>(
+                  "/api/payouts/generate",
+                  { method: "POST", body: "{}" },
+                );
+                await mutate();
+                await globalMutate("/api/payouts");
+                await globalMutate("/api/activity");
+                await globalMutate("/api/stats");
+                push({
+                  title: "Payouts generated",
+                  detail: `${res.data.created} for ${res.data.period}`,
+                  tone: "ok",
+                });
+              }}
+            >
+              Generate period
+            </Button>
+            <Button
               tone="ink"
               onClick={() =>
                 setStatusFor(

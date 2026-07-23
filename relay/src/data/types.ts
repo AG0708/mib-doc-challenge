@@ -4,6 +4,7 @@ export type OutreachStage =
   | "replied"
   | "call_booked"
   | "no_show"
+  | "closed_won"
   | "closed_lost";
 
 export type CrmStage =

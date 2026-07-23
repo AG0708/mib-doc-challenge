@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { mutate as globalMutate } from "swr";
-import { useActivity, useCreators } from "@/lib/api";
-import { WEBHOOK_SECRET } from "@/data/types";
+import { useActivity, useCreators, useHealth } from "@/lib/api";
+import { api } from "@/lib/utils";
 import { formatRelative } from "@/lib/time";
 import { useToast } from "@/components/ui/ToastProvider";
 import {
@@ -11,104 +11,116 @@ import {
   Badge,
   Button,
   Select,
-  Field,
 } from "@/components/ui/primitives";
-
-async function signBody(body: string) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(WEBHOOK_SECRET),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(body));
-  return `sha256=${[...new Uint8Array(sig)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")}`;
-}
 
 export default function SystemsPage() {
   const { push } = useToast();
   const { data: creatorsData } = useCreators("");
   const { data: activityData, mutate } = useActivity();
+  const { data: healthData, mutate: mutateHealth } = useHealth();
   const creators = creatorsData?.data ?? [];
   const webhooks = activityData?.data.webhooks ?? [];
-  const [creatorId, setCreatorId] = useState("c6");
+  const health = healthData?.data;
+  const [creatorId, setCreatorId] = useState("");
   const [step, setStep] = useState("payment_connected");
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState("");
 
+  useEffect(() => {
+    if (!creatorId && creators[0]) setCreatorId(creators[0].id);
+  }, [creators, creatorId]);
+
   async function fire(valid = true) {
+    if (!creatorId) return;
     setBusy(true);
-    const payload = {
-      event: "step.completed",
-      creator_id: creatorId,
-      step,
-      occurred_at: new Date().toISOString(),
-      idempotency_key: `ob_${creatorId}_${step}_${Date.now()}`,
-    };
-    const body = JSON.stringify(payload);
-    const signature = valid
-      ? await signBody(body)
-      : "sha256=deadbeefinvalidsignature";
     try {
-      const res = await fetch("/api/webhooks/onboarding", {
+      const res = await fetch("/api/webhooks/onboarding/simulate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Relay-Signature": signature,
-        },
-        body,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creator_id: creatorId,
+          step,
+          valid,
+        }),
       });
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       setLast(JSON.stringify(json, null, 2));
       await mutate();
+      await mutateHealth();
       await globalMutate("/api/creators");
+      await globalMutate("/api/tasks");
+      await globalMutate("/api/stats");
       await globalMutate((k) => typeof k === "string" && k.startsWith("/api/metrics"));
+      const ok = Boolean(json.ok);
       push({
-        title: res.ok ? "Webhook applied to DB" : "Webhook rejected",
-        detail: res.ok ? `${creatorId} · ${step}` : json.error,
-        tone: res.ok ? "ok" : "bad",
+        title: ok ? "Webhook applied to DB" : "Webhook rejected",
+        detail: ok ? `${creatorId} · ${step}` : String(json.error ?? "error"),
+        tone: ok ? "ok" : "bad",
       });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "request failed";
+      setLast(msg);
+      push({ title: "Webhook failed", detail: msg, tone: "bad" });
     } finally {
       setBusy(false);
     }
   }
 
+  async function ingestToday() {
+    const date = new Date().toISOString().slice(0, 10);
+    await api("/api/metrics", {
+      method: "PUT",
+      body: JSON.stringify({
+        date,
+        views: 1250000,
+        installs: 4200,
+        webVisits: 1800,
+        revenue: 9200,
+      }),
+    });
+    await globalMutate((k) => typeof k === "string" && k.startsWith("/api/metrics"));
+    await mutateHealth();
+    push({ title: "Metrics ingested", detail: date, tone: "ok" });
+  }
+
+  const tables = health?.tables ?? {};
+
   return (
     <div className="animate-rise">
       <PageHeader
         title="Systems"
-        description="Live API + SQLite backend, Supabase-ready schema, and HMAC webhook ingress Sherlock can wire today."
+        description="Fully connected data plane: UI → signed /api → SQLite (Supabase-ready). No client-side fake stores."
       />
 
       <div className="mb-4 grid gap-4 xl:grid-cols-2">
         <section className="card p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-            Architecture
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+                Health
+              </p>
+              <h2 className="text-lg font-semibold">Live DB connection</h2>
+            </div>
+            <Badge tone={health?.connected ? "signal" : "heat"}>
+              {health?.connected ? "connected" : "down"}
+            </Badge>
+          </div>
+          <p className="mono text-xs text-muted">
+            {health?.driver ?? "…"} · journal {String(health?.journalMode ?? "…")}
           </p>
-          <h2 className="mt-1 text-lg font-semibold">UI → /api → DB</h2>
-          <ol className="mt-3 space-y-2 text-sm text-ink-soft">
-            <li>1. Next.js app routes under <span className="mono">/api/*</span></li>
-            <li>2. Durable store: SQLite via Drizzle (local) </li>
-            <li>3. Same tables in <span className="mono">supabase/migrations/001_init.sql</span></li>
-            <li>4. Webhooks verify HMAC, write `webhook_events`, update `creators`</li>
-          </ol>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-            {[
-              "prospects",
-              "creators",
-              "payouts",
-              "daily_metrics",
-              "activity",
-              "webhook_events",
-            ].map((t) => (
-              <div key={t} className="rounded-lg border border-line bg-bg px-2.5 py-2">
-                <p className="mono font-semibold">{t}</p>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+            {Object.entries(tables).map(([name, count]) => (
+              <div key={name} className="rounded-lg border border-line bg-bg px-2.5 py-2">
+                <p className="mono font-semibold">{name}</p>
+                <p className="mt-0.5 text-muted">{count} rows</p>
               </div>
             ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={() => mutateHealth()}>Refresh health</Button>
+            <Button tone="signal" onClick={ingestToday}>
+              Ingest today metrics
+            </Button>
           </div>
         </section>
 
@@ -124,6 +136,10 @@ export default function SystemsPage() {
             </div>
             <Badge tone="signal">HMAC</Badge>
           </div>
+          <p className="mb-3 text-xs text-muted">
+            Browser calls <span className="mono">/simulate</span> — server signs with{" "}
+            <span className="mono">RELAY_WEBHOOK_SECRET</span> (secret never leaves the API).
+          </p>
           <div className="grid gap-2 sm:grid-cols-2">
             <Select value={creatorId} onChange={(e) => setCreatorId(e.target.value)}>
               {creators.map((c) => (
@@ -141,10 +157,10 @@ export default function SystemsPage() {
             </Select>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button tone="ink" disabled={busy} onClick={() => fire(true)}>
+            <Button tone="ink" disabled={busy || !creatorId} onClick={() => fire(true)}>
               {busy ? "Sending…" : "Send signed webhook"}
             </Button>
-            <Button tone="heat" disabled={busy} onClick={() => fire(false)}>
+            <Button tone="heat" disabled={busy || !creatorId} onClick={() => fire(false)}>
               Send bad signature
             </Button>
           </div>
@@ -153,7 +169,6 @@ export default function SystemsPage() {
               {last}
             </pre>
           )}
-          <Field className="mt-3" readOnly value={`Dev secret: ${WEBHOOK_SECRET}`} />
         </section>
       </div>
 
@@ -187,9 +202,9 @@ export default function SystemsPage() {
         <h2 className="mb-2 font-semibold text-ink">Hand off to Sherlock / Supabase</h2>
         <ol className="list-decimal space-y-1 pl-5">
           <li>Run <span className="mono">supabase/migrations/001_init.sql</span> in your project.</li>
-          <li>Point env to Postgres (swap Drizzle SQLite driver for Postgres) or keep SQLite for staging.</li>
-          <li>Set <span className="mono">RELAY_WEBHOOK_SECRET</span> and wire web onboarding to this endpoint.</li>
-          <li>Replace seed loaders with your RevenueCat / PostHog joins into <span className="mono">daily_metrics</span>.</li>
+          <li>Point env to Postgres (swap Drizzle SQLite driver) or keep SQLite for staging.</li>
+          <li>Set <span className="mono">RELAY_WEBHOOK_SECRET</span> and wire web onboarding here.</li>
+          <li>Ingest attribution into <span className="mono">PUT /api/metrics</span>.</li>
         </ol>
       </section>
     </div>

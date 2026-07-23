@@ -10,7 +10,9 @@ import {
   payouts,
   prospects,
   tasks,
+  teamMembers,
   webhookEvents,
+  workspaceSettings,
 } from "./schema";
 import {
   activity as seedActivity,
@@ -20,12 +22,47 @@ import {
   payouts as seedPayouts,
   prospects as seedProspects,
   seedWebhooks,
+  TEAM,
 } from "@/data/seed";
 import { isoDaysAgo, isoHoursAgo } from "@/lib/time";
 
 const now = () => new Date().toISOString();
 
+function seedTeam(db: Db) {
+  if (db.select().from(teamMembers).limit(1).all().length > 0) return;
+  const ts = now();
+  const emails: Record<string, string> = {
+    Ava: "ava@relay.internal",
+    Marcus: "marcus@relay.internal",
+    Noor: "noor@relay.internal",
+    Jules: "jules@relay.internal",
+  };
+  db.insert(teamMembers)
+    .values(
+      TEAM.map((name) => ({
+        id: `tm_${name.toLowerCase()}`,
+        name,
+        email: emails[name] ?? `${name.toLowerCase()}@relay.internal`,
+        role: name === "Ava" ? "Creator Ops Lead" : "Creator Ops",
+        team: "Growth",
+        isOperator: name === "Ava",
+        createdAt: ts,
+      })),
+    )
+    .run();
+
+  if (db.select().from(workspaceSettings).limit(1).all().length === 0) {
+    db.insert(workspaceSettings)
+      .values([
+        { key: "operator_id", value: "tm_ava", updatedAt: ts },
+        { key: "workspace_name", value: "Relay", updatedAt: ts },
+      ])
+      .run();
+  }
+}
+
 function seedExtras(db: Db) {
+  seedTeam(db);
   if (db.select().from(tasks).limit(1).all().length === 0) {
     const ts = now();
     db.insert(tasks)

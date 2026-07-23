@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { mutate as globalMutate } from "swr";
-import { OUTREACH_STAGES, TEAM } from "@/data/seed";
+import { OUTREACH_STAGES } from "@/data/seed";
 import {
+  useMe,
   useNotes,
   useProspects,
+  useTeam,
   useTemplates,
   type ProspectRow,
 } from "@/lib/api";
@@ -21,6 +23,7 @@ import {
   Avatar,
   Empty,
 } from "@/components/ui/primitives";
+import { useRouter } from "next/navigation";
 
 const SAMPLE_CSV = `name,handle,platform,followers,niche,owner,score
 Jade Park,@jadepark,tiktok,420000,true crime,Ava,81
@@ -28,6 +31,10 @@ Rio Mendes,@riomendes,instagram,210000,dating,Jules,74`;
 
 export default function OutreachPage() {
   const { push } = useToast();
+  const router = useRouter();
+  const { data: meData } = useMe();
+  const { data: teamData } = useTeam();
+  const team = teamData?.data ?? [];
   const [owner, setOwner] = useState("all");
   const [q, setQ] = useState("");
   const query = `?owner=${owner}&q=${encodeURIComponent(q)}`;
@@ -167,13 +174,35 @@ export default function OutreachPage() {
         entityType: "prospect",
         entityId: selected.id,
         body: noteBody,
-        author: "Ava",
+        author: meData?.data?.name ?? "Ops",
       }),
     });
     setNoteBody("");
     await mutateNotes();
     await globalMutate("/api/activity");
     push({ title: "Note added", tone: "ok" });
+  }
+
+  async function convertSelected() {
+    if (!selected) return;
+    const res = await api<{ data: { creator: { id: string; name: string } } }>(
+      `/api/prospects/${selected.id}/convert`,
+      {
+        method: "POST",
+        body: JSON.stringify({ manager: selected.owner }),
+      },
+    );
+    await mutate();
+    await globalMutate("/api/creators");
+    await globalMutate("/api/tasks");
+    await globalMutate("/api/stats");
+    await globalMutate("/api/activity");
+    push({
+      title: "Converted to creator",
+      detail: res.data.creator.name,
+      tone: "ok",
+    });
+    router.push(`/creators/${res.data.creator.id}`);
   }
 
   function applyTemplate(id: string) {
@@ -216,9 +245,9 @@ export default function OutreachPage() {
             />
             <Select value={owner} onChange={(e) => setOwner(e.target.value)}>
               <option value="all">All owners</option>
-              {TEAM.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {team.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
                 </option>
               ))}
             </Select>
@@ -309,9 +338,9 @@ export default function OutreachPage() {
             value={form.owner}
             onChange={(e) => setForm({ ...form, owner: e.target.value })}
           >
-            {TEAM.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            {team.map((t) => (
+              <option key={t.id} value={t.name}>
+                {t.name}
               </option>
             ))}
           </Select>
@@ -459,6 +488,11 @@ export default function OutreachPage() {
                 <Button onClick={() => move(selected.id, "contacted")}>
                   Log nudge
                 </Button>
+                {selected.stage !== "closed_won" && (
+                  <Button tone="ink" onClick={convertSelected}>
+                    Convert → CRM
+                  </Button>
+                )}
                 <Button tone="heat" onClick={() => move(selected.id, "closed_lost")}>
                   Close lost
                 </Button>

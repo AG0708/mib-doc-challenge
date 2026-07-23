@@ -756,6 +756,7 @@ export const OUTREACH_STAGES = [
   { id: "replied", label: "Replied" },
   { id: "call_booked", label: "Call booked" },
   { id: "no_show", label: "No-show" },
+  { id: "closed_won", label: "Closed won" },
   { id: "closed_lost", label: "Closed lost" },
 ] as const;
 
