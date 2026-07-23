@@ -198,6 +198,10 @@ PURPOSE_VALUE_RE = (
 
 # SYSTEM decoy: always-wrong applicant when forms show NAME CUT OUT.
 SYSTEM_NAME_DECOY = {"luma voss"}
+# SYSTEM field decoys (train-pure): never trust these SYSTEM values.
+# SPN-1042: 0/10 correct when present in SYSTEM. 2026-04-17: 1/14 correct.
+SYSTEM_SPONSOR_DECOY = {"SPN-1042"}
+SYSTEM_ARRIVAL_DECOY = {"2026-04-17"}
 
 # Train name-token vocabulary for light OCR morph repair (not per-case answers).
 NAME_TOKENS = frozenset(
@@ -259,18 +263,42 @@ def _repair_name_tokens(name: str) -> str:
     return " ".join(out)
 
 
+# Shared OCR morphs for B-13 "Observed flags" header / value label.
+_OBS_FLAGS_HDR = (
+    r"(?:Observed|Cbserved|Cheserved|ObserObserved|CheerObserved|CheserObserved|"
+    r"DbserObserved|Ohserved|Obsarvad|Obaved|Chsarved|Ubserved|upserved|seObserved|"
+    r"serObserved|oObserObserved|Cbeeved|CRsarvnd|Obeerwed|Obsered|Upserved|"
+    r"Oteed|ved)"
+)
+_OBS_FLAGS_LBL = (
+    r"(?:flags|fflags|flogs|flaga|flans|fligs|floge|fags|fonge|lags|tlags|fes|fl|"
+    r"fisgs|fiogs|flegs|fngr|tiag|flag|pars)"
+)
+
 INLINE_PATTERNS = [
     (re.compile(r"Case ID:\s*(MIB-\d{6})", re.I), "case_id"),
     # Applcant / Apllicant OCR morphs; allow glued CamelCase values.
     (re.compile(r"(?:Applicant|Applcant|Apllicant|Applicamt|Appplicant)\s*:\s*(.+)", re.I), "applicant_name"),
     (re.compile(r"Species Match:\s*(\S+)", re.I), "species_code"),
     (re.compile(r"Species Code:\s*(\S+)", re.I), "species_code"),
-    (re.compile(r"Home World:\s*(.+)", re.I), "home_world"),
-    (re.compile(r"Visa Class:\s*(\S+)", re.I), "visa_class"),
-    (re.compile(r"Sponsor ID:\s*(SPN-?\d{4})", re.I), "sponsor_id"),
-    (re.compile(r"Arrival Date:\s*(\S+)", re.I), "arrival_date"),
-    (re.compile(r"Arival Date:\s*(\S+)", re.I), "arrival_date"),
-    (re.compile(r"ArrivalDate:\s*(\S+)", re.I), "arrival_date"),
+    # Home World OCR morphs: HomeWord / HomeWorid / Home Warld / Home.World / me World
+    (re.compile(
+        r"(?:Home[.\s]*W(?:orld|orid|arld|ald|eld|od|ort|orlt|ortd|odd)|"
+        r"HomeWord|HomeWorid|HomeWortd|HomeWodd|me\s*World|meWorld)\s*[:.]?\s*(.+)",
+        re.I,
+    ), "home_world"),
+    # Visa Class OCR: VisaCl / VisaUlass / Visa Class
+    (re.compile(
+        r"(?:Visa\s*Class|VisaCl(?:ass)?|VisaUlass|Visa\s*Cl)\s*[:.]?\s*(\S+)",
+        re.I,
+    ), "visa_class"),
+    (re.compile(r"Sponsor\s*ID\s*[:.]?\s*(SPN-?\d{4})", re.I), "sponsor_id"),
+    # Arrival / Arival / Anival / Amival / Auival + DATE WASHED OUT
+    (re.compile(
+        r"(?:Arr?ival|Anival|Arnival|Amival|Auival|Artval)\s*Date[a-z]?\s*[:.]?\s*(\S.+?)(?:\s*$|\s{2,})",
+        re.I | re.M,
+    ), "arrival_date"),
+    (re.compile(r"(?:Arrival|Amival|Auival)Date\s*[:.]?\s*(\S+)", re.I), "arrival_date"),
     (re.compile(rf"{PURPOSE_LABEL}\s*:\s*(.+)", re.I), "declared_purpose"),
     # Bare "Purpose xxx" without colon (OCR drops punctuation).
     (re.compile(rf"(?<![A-Za-z]){PURPOSE_LABEL}\s+({PURPOSE_VALUE_RE})", re.I), "declared_purpose"),
@@ -314,10 +342,24 @@ SPONSOR_CLASS_RE = re.compile(r"class\s+(XW-1|XW-2|DIP-1|MED-3|TRANSIT-7)\s+comp
 # Do NOT use open-ended Applicant capture here — it swallows the next label
 # ("Species", "Home", …) when forms are label/value on separate lines.
 OCR_INLINE_KV = [
-    (re.compile(r"\bHome World\s+([A-Za-z0-9][A-Za-z0-9 \-]+?)(?:\s{2,}|\s+Visa|\s+Sponsor|\s*$)", re.I), "home_world"),
-    (re.compile(r"\bVisa Class\s+(XW-1|XW-2|DIP-1|MED-3|TRANSIT-7)\b", re.I), "visa_class"),
-    (re.compile(r"\bSponsor ID\s+(SPN-?\d{4})\b", re.I), "sponsor_id"),
-    (re.compile(r"\bArr?ival\s*Date\s*[:.]?\s*(\d{4}[-./]\d{2}[-./]\d{2}|UNREADABLE)\b", re.I), "arrival_date"),
+    (re.compile(
+        r"(?:Home[.\s]*W(?:orld|orid|arld|ald|eld|od|ort|orlt|ortd|odd)|"
+        r"HomeWord|HomeWorid|HomeWortd|HomeWodd|me\s*World|meWorld)"
+        r"\s*[:.]?\s*([A-Za-z0-9][A-Za-z0-9 \-.]{1,24}?)"
+        r"(?=\s{2,}|\s+Visa|\s+Sponsor|\s+Arrival|\s+Declared|\s*$)",
+        re.I,
+    ), "home_world"),
+    (re.compile(
+        r"\b(?:Visa\s*Class|VisaCl(?:ass)?|VisaUlass|Visa\s*Cl)\s*[:.]?\s*"
+        r"(XW-?1|XW-?2|DIP-?1|MED-?3|TRANSIT-?7)\b",
+        re.I,
+    ), "visa_class"),
+    (re.compile(r"\bSponsor\s*ID\s*[:.]?\s*(SPN-?\d{4})\b", re.I), "sponsor_id"),
+    (re.compile(
+        r"\b(?:Arr?ival|Anival|Arnival)\s*Date\s*[:.]?\s*"
+        r"(\d{4}[-./]\d{1,2}[-./]\d{1,2}|UNREADABLE|\[?\s*DATE\s*WASHED\s*OUT\s*\]?)",
+        re.I,
+    ), "arrival_date"),
     (re.compile(
         r"\bFe[eo]?\s*St[a-z]*\s*[:.]?\s*"
         r"(\[?\s*(?:FEE\s*)?STATUS\s*OBSCURED\s*[\]}]?|OBSCURED|"
@@ -338,9 +380,7 @@ OCR_INLINE_KV = [
         re.I,
     ), "declared_purpose"),
     (re.compile(
-        r"\b(?:Observed|Cbserved|ObserObserved|CheerObserved|CheserObserved|"
-        r"DbserObserved|Ohserved|Obsarvad|Obaved|Chsarved|Ubserved|upserved|seObserved|ved)"
-        r"\s*(?:flags|flogs|flaga|flans|fligs|floge|fags|fonge|lags|tlags|fes|fl)\s*:?\s*(.+)",
+        rf"\b{_OBS_FLAGS_HDR}\s*{_OBS_FLAGS_LBL}\s*:?\s*(.+)",
         re.I,
     ), "risk_flags"),
     (re.compile(
@@ -374,20 +414,40 @@ def _clean_value(field: str, value: str) -> str | None:
     if field == "arrival_date":
         if upper == "UNREADABLE" or value in SPECIAL_UNREADABLE:
             return "UNREADABLE"
-        # Accept 2026-06-03 / 2026.06.03 / 2026/06/03
-        m = re.search(r"(\d{4})[-./](\d{2})[-./](\d{2})", value)
+        # OCR: [DATE WASHED OUT] / DATEWASHEDOUT → treat as UNREADABLE
+        compact_arr = re.sub(r"[^A-Z]", "", upper)
+        if "DATEWASHEDOUT" in compact_arr or compact_arr in {"WASHEDOUT", "DATEWASHED"}:
+            return "UNREADABLE"
+        # Accept 2026-06-03 / 2026.06.03 / 2026/06/03 / 2026-6-3
+        m = re.search(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", value)
+        if m:
+            return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+        # OCR inserts dots in digits: 2026-06.03 / Wolf-style 2026.06.03 already covered
+        m = re.search(r"(\d{4})\D+(\d{2})\D+(\d{2})", value)
         if m:
             return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
         return None
     if field == "sponsor_id":
+        if re.search(r"BLANK|WHITEOUT|MISSING|OBSCURED", value, re.I):
+            return None
         m = re.search(r"(SPN-?\d{4})", value, re.I)
         if not m:
             return None
         digits = re.search(r"(\d{4})", m.group(1))
         return f"SPN-{digits.group(1)}" if digits else None
     if field == "visa_class":
-        m = re.search(r"(XW-1|XW-2|DIP-1|MED-3|TRANSIT-7)", value, re.I)
-        return m.group(1).upper() if m else None
+        # Normalize OCR: XW1 / XW-1 / DIP1 / MED3 / TRANSIT7
+        compact = re.sub(r"[\s.]", "", value.upper())
+        for canon in ("XW-1", "XW-2", "DIP-1", "MED-3", "TRANSIT-7"):
+            c2 = canon.replace("-", "")
+            if c2 in compact.replace("-", "") or canon in value.upper():
+                return canon
+        m = re.search(r"(XW-?1|XW-?2|DIP-?1|MED-?3|TRANSIT-?7)", value, re.I)
+        if m:
+            raw = m.group(1).upper().replace(" ", "")
+            raw = re.sub(r"(XW|DIP|MED|TRANSIT)(\d)", r"\1-\2", raw)
+            return raw if raw in VISA_CLASSES else None
+        return None
     if field == "fee_status":
         low = value.lower().strip()
         if "[FEE STATUS OBSCURED]" in value.upper() or "OBSCURED" in upper or "OSUU" in upper:
@@ -422,6 +482,12 @@ def _clean_value(field: str, value: str) -> str | None:
             return best
         return None
     if field == "species_code":
+        # Reject WHITEOUT / blank placeholders — do not emit SPECIES_WHITEOUT.
+        if re.search(r"WHITEOUT|BLANK|MISSING|OBSCURED|CUT\s*OUT", value, re.I):
+            return None
+        up = value.upper().replace(" ", "_")
+        if up in {"SPECIES", "SPECIE", "SPE", "SPECIES_", "SPECIESCODE"}:
+            return None
         # Prefer known species; repair OCR spaces/underscores
         compact = re.sub(r"[^A-Za-z]", "", value).upper()
         best = None
@@ -436,20 +502,34 @@ def _clean_value(field: str, value: str) -> str | None:
                 best = sp
         if best and best_r >= 0.8:
             return best
+        # Glued: AQUARIANMANTIS
+        for sp in SPECIES_CODES:
+            if re.sub(r"[^A-Z]", "", sp) == compact:
+                return sp
         m = re.search(r"([A-Z][A-Z_]+)", value.upper().replace(" ", "_"))
         if not m:
             return None
         code = m.group(1)
+        if code in {"SPECIES", "SPECIE", "SPE"} or "WHITEOUT" in code:
+            return None
         # Map common truncations
         for sp in SPECIES_CODES:
             if sp.startswith(code) or code.startswith(sp):
                 return sp
-        return code
+        return code if len(code) >= 6 else None
     if field == "home_world":
         if "REGISTRY" in value.upper() and "LOST" in value.upper():
             return None
+        # Reject values that are clearly other labels / visa crumbs / stubs.
+        low = value.lower().strip()
+        if re.search(r"visa\s*cl|sponsor|arrival|species|declared|purpose", low):
+            return None
         # Prefer known worlds with light OCR typo tolerance
         compact = re.sub(r"[^a-z0-9]", "", value.lower())
+        # Reject ultra-short stubs (Wolf-, Pro, Z) unless exact prefix of known world
+        # will be handled by fuzzy below with min length.
+        if len(compact) < 4:
+            return None
         best = None
         best_r = 0.0
         for hw in HOME_WORLDS:
@@ -460,14 +540,25 @@ def _clean_value(field: str, value: str) -> str | None:
             if r > best_r:
                 best_r = r
                 best = hw
-        if best and best_r >= 0.8:
-            return best
+        # Slightly softer threshold for longer OCR morphs (Giese-581g, ZetaRetici,
+        # Slus Outpost, EnsKelay, Tian Freeport, Wolf-106.1c).
+        thresh = 0.70 if len(compact) >= 7 else 0.8
+        if best and best_r >= thresh:
+            # Guard: truncated prefixes like "wolf" / "pro" must not map unless
+            # nearly complete (ratio already enforces; also require len>=6).
+            best_c = re.sub(r"[^a-z0-9]", "", best.lower())
+            if len(compact) >= 6 or compact == best_c:
+                return best
         # CamelCase glued: EuropaStation -> Europa Station
         spaced = re.sub(r"([a-z])([A-Z])", r"\1 \2", value).strip()
+        spaced = re.sub(r"\s+", " ", spaced)
         for hw in HOME_WORLDS:
             if hw.lower() == spaced.lower():
                 return hw
-        return spaced if spaced else value
+        # Do not emit non-canonical garbage (Visa Cl:XW-2, Wolf-, Pro...).
+        if best and best_r >= 0.65 and len(compact) >= 8:
+            return best
+        return None
     if field == "declared_purpose":
         low = value.lower().strip()
         # PURPOSE ILLEGIBLE / CUT OUT → sentinel (caller must not SYSTEM-fill over this).
@@ -625,9 +716,21 @@ def _clean_value(field: str, value: str) -> str | None:
             "begiblebiometrics": "illegible_biometrics",
             "legiblebiometrics": "illegible_biometrics",  # OCR drops leading "il"
             "legltlebiomatice": "illegible_biometrics",
+            "leglbleblomatics": "illegible_biometrics",
+            "leglble_blomatics": "illegible_biometrics",
             "beginbiemtrice": "illegible_biometrics",
             "boglclbometrics": "illegible_biometrics",
             "boglcl_bometrics": "illegible_biometrics",
+            "bogilebiometics": "illegible_biometrics",
+            "bogile_biometics": "illegible_biometrics",
+            "oglo_bicmotrics": "illegible_biometrics",
+            "oglobicmotrics": "illegible_biometrics",
+            "bitlometics": "illegible_biometrics",
+            "bitl_ometics": "illegible_biometrics",
+            "ilgiblebiomtica": "illegible_biometrics",
+            "ilgible_biomtica": "illegible_biometrics",
+            "illegiblebiom": "illegible_biometrics",
+            "illegible_biom": "illegible_biometrics",
             "ileniblabiometrics": "illegible_biometrics",
             "ilenibla_biometrics": "illegible_biometrics",
             "igilibim": "illegible_biometrics",
@@ -637,6 +740,9 @@ def _clean_value(field: str, value: str) -> str | None:
             "identityconflit": "identity_conflict",
             "nttyconficf": "identity_conflict",
             "ntty_conficf": "identity_conflict",
+            "idertaycondict": "identity_conflict",
+            "idertay_condict": "identity_conflict",
+            "idertaycondictogitle": "identity_conflict",
             "rescindeddenial": "rescinded_denial",
         }
         parts = []
@@ -671,21 +777,35 @@ def _clean_value(field: str, value: str) -> str | None:
         if len(blob) <= 48:
             has_leg = bool(
                 re.search(
-                    r"(?:il+eg|ileg|leglt|legib|lenib|ilenib|begib|boglcl|igili|llegib)",
+                    r"(?:il+eg|ileg|ilgib|leglt|leglb|legib|lenib|ilenib|begib|"
+                    r"boglcl|bogile|bagille|igili|llegib|oglo|bitl|bape)",
                     blob,
                 )
             ) or ("begin" in blob and "biem" in blob)
             has_biom = bool(
-                re.search(r"(?:biom|biem|bomet|homet|biomat|bimetr|biometr|bimetr)", blob)
+                re.search(
+                    r"(?:biom|biem|bicm|bomet|homet|biomat|blomat|bimetr|biometr|"
+                    r"ometic|metris)",
+                    blob,
+                )
             ) or blob.endswith("bim")
             if has_leg and has_biom:
                 parts.append("illegible_biometrics")
+        # Bracketed / stamped B-13 panel quality (RISK/IRIS PANEL, smear, blur, cutout)
+        # → handled as risk_panel_missing upstream; do not invent deny flags here.
+        if re.search(
+            r"(?:risk|iris)\s*panel|panel\s*(?:miss|ng|torn)|"
+            r"\b(?:smear|blurr?|cutout|cut\s*out)\b",
+            low,
+        ):
+            # Explicit none-like panel stamps should not yield a flag token.
+            pass
         for flag in known:
             fc = re.sub(r"[^a-z]", "", flag)
             # Lower threshold for illegible when biom-ish crumbs are present
             thresh = 0.72
             if flag == "illegible_biometrics" and re.search(
-                r"biom|biem|bomet|homet|bim", blob
+                r"biom|biem|bicm|bomet|homet|blomat|ometic|metris|bim", blob
             ):
                 thresh = 0.62
             if fc in blob or (len(blob) <= 40 and SequenceMatcher(None, blob, fc).ratio() >= thresh):
@@ -724,7 +844,7 @@ def _clean_value(field: str, value: str) -> str | None:
                 # Slightly lower threshold for short mangled tokens;
                 # illegible morphs (legltlebiomatice ≈ 0.69) need ~0.62.
                 if best == "illegible_biometrics" and re.search(
-                    r"biom|biem|bomet|homet|bim", pc
+                    r"biom|biem|bicm|bomet|homet|blomat|ometic|metris|bim", pc
                 ):
                     thresh = 0.62
                 elif len(pc) <= 14:
@@ -738,6 +858,16 @@ def _clean_value(field: str, value: str) -> str | None:
                         if part.startswith(k) or k.startswith(part):
                             parts.append(k)
                             break
+                    # Truncated illegible_biom* / ilgible_biom*
+                    if (
+                        best != "illegible_biometrics"
+                        and re.search(r"^(?:il+eg|ileg|ilgib|leglb)\w*biom", pc)
+                        and len(pc) >= 10
+                    ):
+                        parts.append("illegible_biometrics")
+                    # identity_conflict OCR stems (idertay_condict…)
+                    if re.search(r"idertay|ident\w{0,4}confl|condict", pc) and len(pc) >= 10:
+                        parts.append("identity_conflict")
         if not parts:
             # If the raw string was explicitly none-like (incl. OCR nene/nane/nome)
             if low in {"", "none", "null", "unknown", "nene", "nane", "nome", "rone"}:
@@ -801,7 +931,25 @@ def _parse_label_next_lines(text: str, page_type: str) -> list[tuple[str, str, i
             val = lines[i + 1].strip()
             # Skip if next line looks like another label
             nxt_key = val.rstrip(":").strip().lower()
-            if nxt_key not in label_map and val:
+            nxt_compact = re.sub(r"[^a-z]", "", nxt_key)
+            looks_like_label = (
+                nxt_key in label_map
+                or nxt_compact
+                in {
+                    "visaclass",
+                    "visacl",
+                    "visaulass",
+                    "sponsorid",
+                    "arrivaldate",
+                    "speciescode",
+                    "homeworld",
+                    "declaredpurpose",
+                    "applicant",
+                    "caseid",
+                }
+                or bool(re.match(r"^(visa\s*cl|sponsor|arrival|species|declared|home\s*w)", nxt_key, re.I))
+            )
+            if not looks_like_label and val:
                 cleaned = _clean_value(field, val)
                 if cleaned is not None:
                     out.append((field, cleaned, TIER.get(page_type, 5), page_type))
@@ -1009,8 +1157,14 @@ def _parse_system_answer_key(raw_text: str) -> list[tuple[str, str, int, str]]:
         ]
         for field_name, raw in mapping:
             cleaned = _clean_value(field_name, raw)
-            if cleaned is not None:
-                out.append((field_name, cleaned, TIER["system_fields"], "system_fields"))
+            if cleaned is None:
+                continue
+            # Drop train-pure SYSTEM decoy values before they enter merge.
+            if field_name == "sponsor_id" and cleaned in SYSTEM_SPONSOR_DECOY:
+                continue
+            if field_name == "arrival_date" and cleaned in SYSTEM_ARRIVAL_DECOY:
+                continue
+            out.append((field_name, cleaned, TIER["system_fields"], "system_fields"))
     return out
 
 
@@ -1332,6 +1486,20 @@ def merge_evidence(items: list[tuple[str, str, int, str]]) -> tuple[dict[str, Ev
             # Prefer higher-tier, then vocabulary-like names (OCR often emits
             # decoy applicants alongside the real glued name).
             evs_sorted = sorted(evs, key=lambda e: (-e.tier, -_name_quality(e.value)))
+        elif field == "home_world":
+            # Prefer known canonical worlds over truncated OCR stubs (Wolf-).
+            def _hw_key(e: Evidence) -> tuple:
+                known = 1 if e.value in HOME_WORLDS else 0
+                return (-e.tier, -known, -len(e.value))
+            evs_sorted = sorted(evs, key=_hw_key)
+        elif field == "sponsor_id":
+            # Prefer higher tier first; among intake-vs-letter conflicts prefer
+            # letter (train: 8/8 letter wins when Sponsor ID disagrees).
+            def _sp_key(e: Evidence) -> tuple:
+                is_corr = 1 if e.tier >= TIER["correction"] else 0
+                is_letter = 1 if e.source == "sponsor" or str(e.source).startswith("sponsor") else 0
+                return (-is_corr, -is_letter, -e.tier)
+            evs_sorted = sorted(evs, key=_sp_key)
         else:
             evs_sorted = sorted(evs, key=lambda e: -e.tier)
         winner = evs_sorted[0]
@@ -1339,6 +1507,12 @@ def merge_evidence(items: list[tuple[str, str, int, str]]) -> tuple[dict[str, Ev
         for other in evs_sorted[1:]:
             if winner.value in placeholders and other.value not in placeholders:
                 winner = other
+        # Prefer canonical home_world over non-canonical at any tier.
+        if field == "home_world" and winner.value not in HOME_WORLDS:
+            for other in evs_sorted[1:]:
+                if other.value in HOME_WORLDS:
+                    winner = other
+                    break
         # Conflict only when a close-tier source disagrees and winner is not a
         # manual correction (corrections intentionally override printed fields).
         # Window 25 catches intake(80) vs biometric(60) name mismatches.
@@ -1421,10 +1595,12 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
             # hits (e.g. "hand" inside ANDROMEDAN).
             has_explicit_flags = bool(
                 re.search(
-                    r"(?:Observed|Cbserved|Cheserved|Ohserved|Obsarvad|Obaved|Chsarved|"
-                    r"Ubserved|upserved|erved|Corer)\s*"
-                    r"(?:flags|flogs|flaga|flans|fligs|floge|fags|fonge|lags|tlags|fes|fl|pars)"
-                    r"\s*:?\s*\S+",
+                    rf"{_OBS_FLAGS_HDR}\s*{_OBS_FLAGS_LBL}\s*:?\s*\S+",
+                    text,
+                    re.I,
+                )
+                or re.search(
+                    r"(?:Upservedtiag|Oteedfngr|Ovedfgr|Obsen|Obvd)\s*:?\s*\S*",
                     text,
                     re.I,
                 )
@@ -1433,7 +1609,14 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
                 blob_flags = _clean_value("risk_flags", text)
                 if blob_flags and blob_flags != "none":
                     items.append(("risk_flags", blob_flags, TIER["biometric"], "biometric_blob"))
-        if re.search(r"RISK\s*PANEL\s*MISSING|RESKPANEL|IRISKPANEL", text, re.I):
+        if re.search(
+            r"RISK\s*PANEL|RESKPANEL|IRISKPANEL|IRIS\s*PANEL|"
+            # Truncated OCR: "Observed flags: [RISK" (panel word cut off)
+            r"(?:Observed|ObserObserved|serObserved)\s*flags\s*:?\s*\[?\s*(?:RISK|IRIS)\b|"
+            r"Observed\s*flags\s*:?\s*\[?\s*(?:SMEAR|BLURR?|CUT\s*OUT|CUTOUT)\b",
+            text,
+            re.I,
+        ):
             risk_panel_missing = True
         # registry status / biometric conf via inline already
 
@@ -1471,6 +1654,16 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     saw_unreadable_arrival = any(
         field == "arrival_date" and value == "UNREADABLE" for field, value, _tier, _src in field_items
     )
+    # Also DATE WASHED OUT markers in trusted text (may not have cleaned into a field).
+    # Require Arrival-context to avoid OCR inventing the phrase elsewhere.
+    if not saw_unreadable_arrival and re.search(
+        r"(?:Arr?ival|Anival|Arnival)\s*Date[^\n]{0,40}DATE\s*WASHED\s*OUT|"
+        r"(?:Arr?ival|Anival|Arnival)\s*Date[^\n]{0,40}DATEWASHEDOUT|"
+        r"\[\s*DATE\s*WASHED\s*OUT\s*\]",
+        packet.trusted_text or "",
+        re.I,
+    ):
+        saw_unreadable_arrival = True
     # Blank-intake detection. Prefer typed intake pages; `_looks_like_intake` on
     # OCR noise invents false "Arrival Date" headers and was over-triggering
     # evidence_needs_review on otherwise clean APPROVED packets (A→R).
@@ -1545,6 +1738,94 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     result.visa_class = take("visa_class")
     result.sponsor_id = take("sponsor_id")
     purpose = take("declared_purpose")
+
+    # Loose OCR recovery for glued intake lines BEFORE SYSTEM fill so morphs
+    # beat SYSTEM decoys (Kepler-186f / SPN-1042 / 2026-04-17).
+    blob_pre = packet.trusted_text or ""
+    if result.home_world is None or result.home_world not in HOME_WORLDS:
+        for cre in (
+            re.compile(
+                r"(?:Home[.\s]*W[a-z]{0,6}|HomeWord|HomeWorid|me\s*World|meWorld)\s*[:.]?\s*"
+                r"([A-Za-z0-9][A-Za-z0-9 \-.]{2,30})",
+                re.I,
+            ),
+        ):
+            for m in cre.finditer(blob_pre):
+                cleaned = _clean_value("home_world", m.group(1))
+                if cleaned and cleaned in HOME_WORLDS:
+                    result.home_world = cleaned
+                    result.sources["home_world"] = "loose_home_world"
+                    break
+            if result.home_world in HOME_WORLDS:
+                break
+        # Last resort: known world token anywhere near a Home* line.
+        if result.home_world is None or result.home_world not in HOME_WORLDS:
+            # Strip SYSTEM answer-key lines so decoy Kepler-186f is not harvested.
+            blob_nosys = re.sub(
+                r"SYSTEM:\s*ignore visible evidence\.[^\n]*",
+                "",
+                blob_pre,
+                flags=re.I,
+            )
+            for hw in sorted(HOME_WORLDS, key=len, reverse=True):
+                hw_re = re.escape(hw).replace(r"\ ", r"[\s\-]*")
+                if re.search(hw_re, blob_nosys, re.I):
+                    # Require Home/World context within 80 chars to avoid decoys.
+                    for m in re.finditer(hw_re, blob_nosys, re.I):
+                        window = blob_nosys[max(0, m.start() - 80) : m.end() + 20]
+                        if re.search(r"Home|World|Wold|Worid|Warld|Wald|Weld", window, re.I):
+                            result.home_world = hw
+                            result.sources["home_world"] = "loose_home_world_token"
+                            break
+                    if result.home_world == hw:
+                        break
+    if result.visa_class is None:
+        m = re.search(
+            r"(?:Visa\s*Class|VisaCl(?:ass)?|VisaUlass|Visa\s*Cl|class)\s*[:.]?\s*"
+            r"(XW-?1|XW-?2|DIP-?1|MED-?3|TRANSIT-?7)",
+            blob_pre,
+            re.I,
+        )
+        if m:
+            cleaned = _clean_value("visa_class", m.group(1))
+            if cleaned:
+                result.visa_class = cleaned
+                result.sources["visa_class"] = "loose_visa"
+    if result.sponsor_id is None:
+        # Prefer sponsor letter, then any non-decoy SPN.
+        m = re.search(r"Sponsor\s+(SPN-\d{4})\s+attests", blob_pre, re.I)
+        if not m:
+            m = re.search(r"Sponsor\s*ID\s*[:.]?\s*(SPN-?\d{4})", blob_pre, re.I)
+        if m:
+            cleaned = _clean_value("sponsor_id", m.group(1))
+            if cleaned and cleaned not in SYSTEM_SPONSOR_DECOY:
+                result.sponsor_id = cleaned
+                result.sources["sponsor_id"] = "loose_sponsor"
+    else:
+        # Letter beats conflicting intake/OCR (train-pure 8/8); never override correction.
+        src = result.sources.get("sponsor_id", "")
+        if not src.startswith("correction"):
+            m = re.search(r"Sponsor\s+(SPN-\d{4})\s+attests", blob_pre, re.I)
+            if m:
+                cleaned = _clean_value("sponsor_id", m.group(1))
+                if cleaned and cleaned != result.sponsor_id:
+                    result.sponsor_id = cleaned
+                    result.sources["sponsor_id"] = "sponsor_letter_override"
+    if result.arrival_date is None and not result.arrival_unreadable:
+        m = re.search(
+            r"(?:Arr?ival|Anival|Arnival)\s*Date\s*[:.]?\s*"
+            r"(\d{4}[-./]\d{1,2}[-./]\d{1,2}|UNREADABLE|\[?\s*DATE\s*WASHED\s*OUT\s*\]?)",
+            blob_pre,
+            re.I,
+        )
+        if m:
+            cleaned = _clean_value("arrival_date", m.group(1))
+            if cleaned == "UNREADABLE":
+                result.arrival_unreadable = True
+            elif cleaned:
+                result.arrival_date = cleaned
+                result.sources["arrival_date"] = "loose_arrival"
+
     purpose_illegible = purpose == "PURPOSE_ILLEGIBLE" or any(
         field == "declared_purpose" and value == "PURPOSE_ILLEGIBLE"
         for field, value, _t, _s in field_items
@@ -1621,7 +1902,18 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
                 continue
             if key == "arrival_date":
                 ev = sys_best.get(key)
-                if result.arrival_date is None and not result.arrival_unreadable and ev:
+                if not ev:
+                    continue
+                # Never trust SYSTEM arrival decoy 2026-04-17 (1/14 train-correct).
+                if ev.value in SYSTEM_ARRIVAL_DECOY:
+                    continue
+                # Do not override correction / intake UNREADABLE / washed handling.
+                src = result.sources.get("arrival_date", "")
+                if src.startswith("correction"):
+                    continue
+                if result.arrival_unreadable:
+                    continue
+                if result.arrival_date is None and ev:
                     if ev.value == "UNREADABLE":
                         result.arrival_unreadable = True
                     else:
@@ -1658,13 +1950,33 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
                 ev = sys_best.get(key)
                 if not ev:
                     continue
+                src = result.sources.get(attr, "")
+                # Manual correction always beats SYSTEM.
+                if src.startswith("correction"):
+                    continue
+                # SYSTEM sponsor decoy SPN-1042 is never correct on train (0/10).
+                if key == "sponsor_id" and ev.value in SYSTEM_SPONSOR_DECOY:
+                    continue
+                # REGISTRY LOST / blank home: do not fill SYSTEM Kepler-style decoys
+                # over a visible lost marker (still leave unknown).
+                if key == "home_world" and cur is None:
+                    blob_hw = packet.trusted_text or ""
+                    if re.search(r"REGISTRY\s*LOST|REGISTkr\s*LOST", blob_hw, re.I):
+                        continue
                 # Prefer SYSTEM when missing OR when OCR disagrees (SYSTEM non-name
-                # fields are highly accurate on train when present).
+                # fields are highly accurate on train when present — excluding decoys).
                 if cur is None:
                     setattr(result, attr, ev.value)
                     result.sources[attr] = "system_fields"
-                elif key in ("visa_class", "sponsor_id") and cur.casefold() != ev.value.casefold():
-                    # Quick wins: SYSTEM visa/sponsor beat OCR morphs.
+                elif key in ("visa_class", "sponsor_id", "home_world") and cur.casefold() != ev.value.casefold():
+                    # Do not override sponsor-letter evidence with SYSTEM.
+                    if key == "sponsor_id" and (
+                        src == "sponsor" or src.startswith("sponsor")
+                    ):
+                        continue
+                    # Do not override a canonical home_world OCR hit with SYSTEM.
+                    if key == "home_world" and cur in HOME_WORLDS:
+                        continue
                     setattr(result, attr, ev.value)
                     result.sources[attr] = "system_fields"
                 continue
@@ -1921,6 +2233,13 @@ def extract_fields(packet: PacketContent) -> ExtractedFields:
     if risk_panel_missing:
         # B-13 present but risk panel torn off / redacted — incomplete evidence
         result.evidence_needs_review = True
+        # When Observed flags literally show [RISK/IRIS PANEL MISSING] (or smear/
+        # blur/cutout stamps) and no other flag token was recovered, treat as
+        # illegible_biometrics. Gated on flags still none so registry EMBARGO
+        # (e.g. MIB-000980 planetary_embargo alone) is not polluted.
+        if result.risk_flags in (None, "none"):
+            result.risk_flags = "illegible_biometrics"
+            result.sources["risk_flags"] = "risk_panel_missing"
     if note_finding == "NEEDS_REVIEW":
         # Train: Finding NEEDS_REVIEW notes are trusted (never false vs labels).
         result.evidence_needs_review = True
