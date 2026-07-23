@@ -157,3 +157,24 @@ export function Empty({ label }: { label: string }) {
     </div>
   );
 }
+
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "animate-pulse rounded-lg bg-line/70",
+        className,
+      )}
+    />
+  );
+}
+
+export function StatSkeleton() {
+  return (
+    <div className="card p-4">
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="mt-3 h-8 w-28" />
+      <Skeleton className="mt-2 h-3 w-16" />
+    </div>
+  );
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 
 async function fetcher<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
@@ -9,44 +9,79 @@ async function fetcher<T>(url: string): Promise<T> {
 }
 
 export function useProspects(query = "") {
-  return useSWR<{ data: ProspectRow[] }>(
-    `/api/prospects${query}`,
-    fetcher,
-    { refreshInterval: 8000 },
-  );
+  return useSWR<{ data: ProspectRow[] }>(`/api/prospects${query}`, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
 }
 
 export function useCreators(query = "") {
-  return useSWR<{ data: CreatorRow[] }>(
-    `/api/creators${query}`,
-    fetcher,
-    { refreshInterval: 8000 },
-  );
+  return useSWR<{ data: CreatorRow[] }>(`/api/creators${query}`, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
 }
 
 export function usePayouts(query = "") {
-  return useSWR<{ data: PayoutRow[] }>(
-    `/api/payouts${query}`,
-    fetcher,
-    { refreshInterval: 8000 },
-  );
+  return useSWR<{ data: PayoutRow[] }>(`/api/payouts${query}`, fetcher, {
+    refreshInterval: 8000,
+    keepPreviousData: true,
+  });
 }
 
 export function useMetrics(days = 30) {
-  return useSWR<{ data: MetricsPayload }>(
-    `/api/metrics?days=${days}`,
-    fetcher,
-    { refreshInterval: 10000 },
-  );
+  return useSWR<{ data: MetricsPayload }>(`/api/metrics?days=${days}`, fetcher, {
+    refreshInterval: 10000,
+    keepPreviousData: true,
+  });
 }
 
 export function useActivity() {
   return useSWR<{ data: { activity: ActivityRow[]; webhooks: WebhookRow[] } }>(
     "/api/activity",
     fetcher,
-    { refreshInterval: 5000 },
+    { refreshInterval: 5000, keepPreviousData: true },
   );
 }
+
+export function useStats() {
+  return useSWR<{ data: StatsPayload }>("/api/stats", fetcher, {
+    refreshInterval: 10000,
+  });
+}
+
+export function useSearch(q: string) {
+  const key = q.trim().length ? `/api/search?q=${encodeURIComponent(q.trim())}` : null;
+  return useSWR<{ data: { results: SearchHit[] } }>(key, fetcher, {
+    keepPreviousData: true,
+  });
+}
+
+export async function revalidateOps() {
+  await Promise.all([
+    globalMutate((k) => typeof k === "string" && k.startsWith("/api/")),
+  ]);
+}
+
+export type SearchHit = {
+  type: "prospect" | "creator" | "payout";
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+};
+
+export type StatsPayload = {
+  prospects: number;
+  creators: number;
+  live: number;
+  queuedPayouts: number;
+  webhooks: number;
+  callBooked: number;
+  atRisk: number;
+  dbPath: string;
+  webhookSecretConfigured: boolean;
+};
 
 export type ProspectRow = {
   id: string;

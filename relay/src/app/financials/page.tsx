@@ -85,17 +85,56 @@ export default function FinancialsPage() {
         title="Financials"
         description="Payroll ledger and attribution charts — every status change is persisted."
         action={
-          <Button
-            tone="ink"
-            onClick={() =>
-              setStatusFor(
-                allPayouts.filter((p) => p.status === "queued").map((p) => p.id),
-                "processing",
-              )
-            }
-          >
-            Process queued batch
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                const header = [
+                  "creator",
+                  "period",
+                  "views",
+                  "amount",
+                  "status",
+                  "updated_at",
+                ];
+                const lines = allPayouts.map((p) =>
+                  [
+                    p.creatorName,
+                    p.period,
+                    p.views,
+                    p.amount,
+                    p.status,
+                    p.updatedAt,
+                  ]
+                    .map((v) => `"${String(v).replaceAll('"', '""')}"`)
+                    .join(","),
+                );
+                const csv = [header.join(","), ...lines].join("\n");
+                const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `relay-payouts-${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                push({ title: "CSV exported", tone: "ok" });
+              }}
+            >
+              Export CSV
+            </Button>
+            <Button
+              tone="ink"
+              onClick={() =>
+                setStatusFor(
+                  allPayouts
+                    .filter((p) => p.status === "queued")
+                    .map((p) => p.id),
+                  "processing",
+                )
+              }
+            >
+              Process queued batch
+            </Button>
+          </div>
         }
       />
 

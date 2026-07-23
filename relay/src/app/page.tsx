@@ -18,7 +18,15 @@ import {
 } from "recharts";
 import { useMetrics } from "@/lib/api";
 import { formatCompact, formatUsd, pct } from "@/lib/utils";
-import { PageHeader, Stat, Badge, Avatar, Button, Empty } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  Stat,
+  Badge,
+  Avatar,
+  Button,
+  Empty,
+  StatSkeleton,
+} from "@/components/ui/primitives";
 
 export default function PulsePage() {
   const [days, setDays] = useState(30);
@@ -60,30 +68,43 @@ export default function PulsePage() {
       />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          label="Views"
-          value={isLoading ? "—" : formatCompact(totals?.views ?? 0)}
-          hint={`${days}d window`}
-        />
-        <Stat
-          label="App installs"
-          value={isLoading ? "—" : formatCompact(totals?.installs ?? 0)}
-          hint={
-            conv ? `${conv.viewToInstall.toFixed(2)}% of views` : undefined
-          }
-        />
-        <Stat
-          label="Web visits"
-          value={isLoading ? "—" : formatCompact(totals?.webVisits ?? 0)}
-          hint={conv ? `${conv.viewToWeb.toFixed(2)}% of views` : undefined}
-        />
-        <Stat
-          label="Revenue"
-          value={isLoading ? "—" : formatUsd(totals?.revenue ?? 0)}
-          hint={
-            conv ? `${formatUsd(conv.revPerInstall)} / install` : undefined
-          }
-        />
+        {isLoading && !payload ? (
+          <>
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+            <StatSkeleton />
+          </>
+        ) : (
+          <>
+            <Stat
+              label="Views"
+              value={formatCompact(totals?.views ?? 0)}
+              hint={`${days}d window`}
+            />
+            <Stat
+              label="App installs"
+              value={formatCompact(totals?.installs ?? 0)}
+              hint={
+                conv ? `${conv.viewToInstall.toFixed(2)}% of views` : undefined
+              }
+            />
+            <Stat
+              label="Web visits"
+              value={formatCompact(totals?.webVisits ?? 0)}
+              hint={
+                conv ? `${conv.viewToWeb.toFixed(2)}% of views` : undefined
+              }
+            />
+            <Stat
+              label="Revenue"
+              value={formatUsd(totals?.revenue ?? 0)}
+              hint={
+                conv ? `${formatUsd(conv.revPerInstall)} / install` : undefined
+              }
+            />
+          </>
+        )}
       </div>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-[1.4fr_1fr]">

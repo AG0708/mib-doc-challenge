@@ -38,6 +38,16 @@ export function getDb() {
   return globalForDb.__relayDb;
 }
 
+export function closeDb() {
+  try {
+    globalForDb.__relaySqlite?.close();
+  } catch {
+    /* ignore */
+  }
+  globalForDb.__relaySqlite = undefined;
+  globalForDb.__relayDb = undefined;
+}
+
 function migrate(sqlite: Database.Database) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS prospects (
