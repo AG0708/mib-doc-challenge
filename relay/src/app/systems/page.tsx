@@ -1,4 +1,5 @@
-import { PageHeader, SectionTitle, Badge } from "@/components/ui/primitives";
+import { PageHeader, SectionTitle, Badge, Button } from "@/components/ui/primitives";
+import Link from "next/link";
 
 const ENTITIES = [
   {
@@ -58,6 +59,11 @@ export default function SystemsPage() {
         eyebrow="Process · Systems"
         title="How I’d wire Beige."
         description="Backend-first walkthrough: entities, the onboarding webhook contract, attribution math, and the first three ships I’d push on your stack."
+        action={
+          <Link href="/">
+            <Button tone="ink">Back to Pulse</Button>
+          </Link>
+        }
       />
 
       <section className="panel animate-rise mb-5 rounded-2xl p-5">

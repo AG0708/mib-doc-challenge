@@ -1,9 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { creators, payouts, dailyMetrics } from "@/data/seed";
+import { dailyMetrics } from "@/data/seed";
+import { useOps } from "@/lib/ops-store";
 import { formatCompact, formatUsd, cn } from "@/lib/utils";
-import { PageHeader, SectionTitle, Badge, StatBlock } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  SectionTitle,
+  Badge,
+  StatBlock,
+  Button,
+  Avatar,
+} from "@/components/ui/primitives";
 import { AttributionBars, RevenueChart } from "@/components/charts/Charts";
 
 const STATUS_TONE = {
@@ -14,12 +22,13 @@ const STATUS_TONE = {
 };
 
 export default function FinancialsPage() {
-  const [status, setStatus] = useState<string>("all");
+  const { creators, payouts, setPayoutStatus } = useOps();
+  const [status, setStatus] = useState("all");
 
   const queue = useMemo(
     () =>
       payouts.filter((p) => (status === "all" ? true : p.status === status)),
-    [status],
+    [status, payouts],
   );
 
   const payrollDue = payouts
@@ -44,16 +53,32 @@ export default function FinancialsPage() {
       revenue: c.revenue30d,
     }));
 
+  function approveBatch() {
+    payouts
+      .filter((p) => p.status === "queued")
+      .forEach((p) => setPayoutStatus(p.id, "processing"));
+  }
+
   return (
     <div>
       <PageHeader
         eyebrow="Money · Financials"
         title="Payroll meets attribution."
-        description="Track what creators are owed, what content converted, and how views map to installs, unique web visits, and revenue."
+        description="What creators are owed, what content converted, and what is held for review."
+        action={
+          <Button tone="ink" onClick={approveBatch}>
+            Process queued batch
+          </Button>
+        }
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatBlock label="Revenue 30d" value={formatUsd(rev30)} hint="attributed" />
+        <StatBlock
+          label="Revenue 30d"
+          value={formatUsd(rev30)}
+          hint="attributed"
+          spark={dailyMetrics.slice(-12).map((d) => d.revenue)}
+        />
         <StatBlock label="Payroll queued" value={formatUsd(payrollDue)} hint="next batch" />
         <StatBlock label="Paid this cycle" value={formatUsd(paid)} delta="cleared" />
         <StatBlock label="On hold" value={formatUsd(held)} hint="policy review" />
@@ -98,7 +123,7 @@ export default function FinancialsPage() {
 
       <div className="panel overflow-hidden rounded-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
+          <table className="w-full min-w-[780px] text-left text-sm">
             <thead className="border-b border-line bg-white/50 text-[11px] uppercase tracking-[0.12em] text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Creator</th>
@@ -106,12 +131,18 @@ export default function FinancialsPage() {
                 <th className="px-4 py-3 font-medium">Views</th>
                 <th className="px-4 py-3 font-medium">Amount</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {queue.map((p) => (
                 <tr key={p.id} className="border-b border-line/70">
-                  <td className="px-4 py-3 font-medium">{p.creatorName}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Avatar name={p.creatorName} size="sm" />
+                      <span className="font-medium">{p.creatorName}</span>
+                    </div>
+                  </td>
                   <td className="mono px-4 py-3 text-muted">{p.period}</td>
                   <td className="mono px-4 py-3">{formatCompact(p.views)}</td>
                   <td className="mono px-4 py-3 font-semibold">
@@ -119,6 +150,36 @@ export default function FinancialsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <Badge tone={STATUS_TONE[p.status]}>{p.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.status !== "paid" && (
+                        <Button
+                          size="sm"
+                          tone="signal"
+                          onClick={() => setPayoutStatus(p.id, "paid")}
+                        >
+                          Mark paid
+                        </Button>
+                      )}
+                      {p.status !== "hold" && p.status !== "paid" && (
+                        <Button
+                          size="sm"
+                          tone="heat"
+                          onClick={() => setPayoutStatus(p.id, "hold")}
+                        >
+                          Hold
+                        </Button>
+                      )}
+                      {p.status === "hold" && (
+                        <Button
+                          size="sm"
+                          onClick={() => setPayoutStatus(p.id, "queued")}
+                        >
+                          Release
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

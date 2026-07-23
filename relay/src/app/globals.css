@@ -1,20 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #e9eef3;
-  --paper-2: #dfe7ef;
-  --ink: #0d1420;
-  --ink-soft: #2a3548;
-  --muted: #5b6a7e;
-  --line: rgba(13, 20, 32, 0.1);
-  --signal: #0fb981;
+  --paper: #e6ecf2;
+  --paper-2: #d7e0ea;
+  --ink: #0b1220;
+  --ink-soft: #243247;
+  --muted: #5a6b80;
+  --line: rgba(11, 18, 32, 0.11);
+  --signal: #12c48b;
   --signal-deep: #0a8f63;
-  --heat: #ff5a2a;
-  --amber: #e8a317;
-  --panel: rgba(255, 255, 255, 0.62);
-  --panel-strong: rgba(255, 255, 255, 0.86);
-  --glow: rgba(15, 185, 129, 0.22);
-  --shadow: 0 18px 50px rgba(13, 20, 32, 0.08);
+  --heat: #ff4f24;
+  --amber: #efb014;
+  --panel: rgba(255, 255, 255, 0.66);
+  --panel-strong: rgba(255, 255, 255, 0.9);
+  --shadow: 0 20px 55px rgba(11, 18, 32, 0.09);
 }
 
 @theme inline {
@@ -49,10 +48,10 @@ body {
   color: var(--ink);
   font-family: var(--font-body), system-ui, sans-serif;
   background:
-    radial-gradient(1200px 600px at 8% -10%, rgba(15, 185, 129, 0.16), transparent 55%),
-    radial-gradient(900px 500px at 92% 0%, rgba(255, 90, 42, 0.1), transparent 50%),
-    radial-gradient(700px 400px at 50% 100%, rgba(232, 163, 23, 0.08), transparent 55%),
-    linear-gradient(165deg, #f4f7fa 0%, var(--paper) 45%, var(--paper-2) 100%);
+    radial-gradient(1100px 520px at 0% -8%, rgba(18, 196, 139, 0.18), transparent 55%),
+    radial-gradient(900px 480px at 100% 0%, rgba(255, 79, 36, 0.11), transparent 52%),
+    radial-gradient(800px 420px at 70% 100%, rgba(239, 176, 20, 0.1), transparent 55%),
+    linear-gradient(160deg, #f3f7fb 0%, var(--paper) 48%, var(--paper-2) 100%);
   background-attachment: fixed;
 }
 
@@ -62,16 +61,16 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: 0;
-  opacity: 0.35;
+  opacity: 0.4;
   background-image:
-    linear-gradient(rgba(13, 20, 32, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(13, 20, 32, 0.03) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+    linear-gradient(rgba(11, 18, 32, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 18, 32, 0.028) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at 30% 20%, black 15%, transparent 70%);
 }
 
 ::selection {
-  background: rgba(15, 185, 129, 0.28);
+  background: rgba(18, 196, 139, 0.28);
 }
 
 a {
@@ -79,17 +78,24 @@ a {
   text-decoration: none;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
 }
 
 .panel-strong {
   background: var(--panel-strong);
   border: 1px solid var(--line);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
 }
 
@@ -100,7 +106,7 @@ a {
 
 .display {
   font-family: var(--font-display), system-ui, sans-serif;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.04em;
 }
 
 .grain {
@@ -113,15 +119,15 @@ a {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  opacity: 0.045;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   mix-blend-mode: multiply;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -136,17 +142,8 @@ a {
     opacity: 1;
   }
   50% {
-    transform: scale(1.35);
-    opacity: 0.55;
-  }
-}
-
-@keyframes sweep {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 100% 50%;
+    transform: scale(1.4);
+    opacity: 0.5;
   }
 }
 
@@ -160,7 +157,7 @@ a {
 
 .stage-rail {
   scrollbar-width: thin;
-  scrollbar-color: rgba(13, 20, 32, 0.2) transparent;
+  scrollbar-color: rgba(11, 18, 32, 0.2) transparent;
 }
 
 .stage-rail::-webkit-scrollbar {
@@ -168,6 +165,12 @@ a {
 }
 
 .stage-rail::-webkit-scrollbar-thumb {
-  background: rgba(13, 20, 32, 0.18);
+  background: rgba(11, 18, 32, 0.16);
   border-radius: 999px;
+}
+
+.drag-over {
+  outline: 2px dashed rgba(18, 196, 139, 0.55);
+  outline-offset: -4px;
+  background: rgba(18, 196, 139, 0.06);
 }

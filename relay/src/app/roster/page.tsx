@@ -1,9 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { creators } from "@/data/seed";
+import { useOps } from "@/lib/ops-store";
 import { formatCompact, formatUsd, cn } from "@/lib/utils";
-import { PageHeader, Badge, SectionTitle } from "@/components/ui/primitives";
+import type { Creator } from "@/data/types";
+import {
+  PageHeader,
+  Badge,
+  SectionTitle,
+  Avatar,
+  Button,
+  Select,
+  PlatformDot,
+} from "@/components/ui/primitives";
 
 const STANDING_TONE = {
   elite: "signal" as const,
@@ -13,8 +22,10 @@ const STANDING_TONE = {
 };
 
 export default function RosterPage() {
-  const [standing, setStanding] = useState<string>("all");
-  const [sort, setSort] = useState<"revenue" | "views" | "cpm">("revenue");
+  const { creators, nudgeCreator, setCreatorStanding } = useOps();
+  const [standing, setStanding] = useState("all");
+  const [sort, setSort] = useState<"revenue" | "views" | "cpm" | "cadence">("revenue");
+  const [selected, setSelected] = useState<Creator | null>(null);
 
   const liveish = useMemo(() => {
     let list = creators.filter((c) =>
@@ -24,39 +35,49 @@ export default function RosterPage() {
     list = [...list].sort((a, b) => {
       if (sort === "revenue") return b.revenue30d - a.revenue30d;
       if (sort === "views") return b.views30d - a.views30d;
+      if (sort === "cadence") {
+        const fa = a.postsDue ? a.postsDone / a.postsDue : 1;
+        const fb = b.postsDue ? b.postsDone / b.postsDue : 1;
+        return fa - fb;
+      }
       return b.cpm - a.cpm;
     });
     return list;
-  }, [standing, sort]);
+  }, [creators, standing, sort]);
+
+  const avgFulfillment = Math.round(
+    (liveish.reduce(
+      (s, c) => s + (c.postsDue ? c.postsDone / c.postsDue : 1),
+      0,
+    ) /
+      Math.max(liveish.length, 1)) *
+      100,
+  );
 
   return (
     <div>
       <PageHeader
         eyebrow="Active · Roster"
         title="Who is posting — and earning."
-        description="Management view for the live roster: content cadence, commercial terms, standing, and the outcomes each creator is driving."
+        description="Cadence, terms, standing, and outcomes for every live creator."
         action={
           <div className="flex flex-wrap gap-2">
-            <select
-              value={standing}
-              onChange={(e) => setStanding(e.target.value)}
-              className="panel-strong rounded-xl px-3 py-2 text-sm"
-            >
+            <Select value={standing} onChange={(e) => setStanding(e.target.value)}>
               <option value="all">All standing</option>
               <option value="elite">Elite</option>
               <option value="strong">Strong</option>
               <option value="watch">Watch</option>
               <option value="at_risk">At risk</option>
-            </select>
-            <select
+            </Select>
+            <Select
               value={sort}
               onChange={(e) => setSort(e.target.value as typeof sort)}
-              className="panel-strong rounded-xl px-3 py-2 text-sm"
             >
               <option value="revenue">Sort · revenue</option>
               <option value="views">Sort · views</option>
               <option value="cpm">Sort · CPM</option>
-            </select>
+              <option value="cadence">Sort · cadence risk</option>
+            </Select>
           </div>
         }
       />
@@ -66,22 +87,16 @@ export default function RosterPage() {
           <p className="mono text-[11px] uppercase tracking-[0.14em] text-muted">
             Active roster
           </p>
-          <p className="mono mt-2 text-3xl font-semibold tracking-tight">{liveish.length}</p>
+          <p className="mono mt-2 text-3xl font-semibold tracking-tight">
+            {liveish.length}
+          </p>
         </div>
         <div className="panel rounded-2xl p-4">
           <p className="mono text-[11px] uppercase tracking-[0.14em] text-muted">
             Avg fulfillment
           </p>
           <p className="mono mt-2 text-3xl font-semibold tracking-tight">
-            {Math.round(
-              (liveish.reduce(
-                (s, c) => s + (c.postsDue ? c.postsDone / c.postsDue : 1),
-                0,
-              ) /
-                Math.max(liveish.length, 1)) *
-                100,
-            )}
-            %
+            {avgFulfillment}%
           </p>
         </div>
         <div className="panel rounded-2xl p-4">
@@ -103,20 +118,27 @@ export default function RosterPage() {
           return (
             <article
               key={c.id}
-              className="panel animate-rise rounded-2xl p-4 md:p-5"
-              style={{ animationDelay: `${i * 35}ms` }}
+              className="panel animate-rise cursor-pointer rounded-2xl p-4 transition hover:bg-white/75 md:p-5"
+              style={{ animationDelay: `${i * 30}ms` }}
+              onClick={() => setSelected(c)}
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold">{c.name}</h3>
-                    <Badge tone={STANDING_TONE[c.standing]}>
-                      {c.standing.replace("_", " ")}
-                    </Badge>
+                <div className="flex min-w-0 items-start gap-3">
+                  <Avatar name={c.name} />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-semibold">{c.name}</h3>
+                      <Badge tone={STANDING_TONE[c.standing]}>
+                        {c.standing.replace("_", " ")}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
+                      {c.handle} · {c.manager} · {c.rate}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      <PlatformDot platform={c.platform} /> · {c.city}
+                    </p>
                   </div>
-                  <p className="mt-1 text-sm text-muted">
-                    {c.handle} · {c.manager} · {c.rate}
-                  </p>
                 </div>
                 <p className="mono text-right text-sm font-semibold">
                   {formatUsd(c.revenue30d)}
@@ -166,10 +188,75 @@ export default function RosterPage() {
                   />
                 </div>
               </div>
+
+              <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                <Button size="sm" tone="amber" onClick={() => nudgeCreator(c.id)}>
+                  Nudge manager
+                </Button>
+                <Button size="sm" onClick={() => setSelected(c)}>
+                  Details
+                </Button>
+              </div>
             </article>
           );
         })}
       </div>
+
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/35 p-4 backdrop-blur-[2px] sm:items-center"
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="panel-strong w-full max-w-lg rounded-2xl p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <Avatar name={selected.name} size="lg" />
+              <div className="min-w-0 flex-1">
+                <h3 className="display text-3xl">{selected.name}</h3>
+                <p className="text-sm text-muted">
+                  {selected.handle} · next payout {formatUsd(selected.nextPayout)}
+                </p>
+              </div>
+              <Button size="sm" onClick={() => setSelected(null)}>
+                Close
+              </Button>
+            </div>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
+              Set standing
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(["elite", "strong", "watch", "at_risk"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setCreatorStanding(selected.id, s);
+                    setSelected({ ...selected, standing: s });
+                  }}
+                  className={cn(
+                    "rounded-lg border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em]",
+                    selected.standing === s
+                      ? "border-ink bg-ink text-white"
+                      : "border-line bg-white",
+                  )}
+                >
+                  {s.replace("_", " ")}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button tone="amber" onClick={() => nudgeCreator(selected.id)}>
+                Slack nudge
+              </Button>
+              <Button tone="ink" onClick={() => setSelected(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
