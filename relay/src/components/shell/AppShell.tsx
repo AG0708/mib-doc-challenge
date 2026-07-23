@@ -35,32 +35,49 @@ type BadgeKey =
   | "posts"
   | "templates";
 
-const NAV: {
+type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
   badge?: BadgeKey;
-}[] = [
-  { href: "/", label: "Pulse", icon: LayoutDashboard },
-  { href: "/outreach", label: "Outreach", icon: Radar, badge: "callBooked" },
-  { href: "/crm", label: "CRM", icon: GitBranch, badge: "creators" },
-  { href: "/roster", label: "Roster", icon: Users, badge: "atRisk" },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare, badge: "openTasks" },
-  { href: "/content", label: "Content", icon: Clapperboard, badge: "posts" },
+};
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
-    href: "/templates",
-    label: "Templates",
-    icon: FileText,
-    badge: "templates",
+    label: "Pipeline",
+    items: [
+      { href: "/", label: "Pulse", icon: LayoutDashboard },
+      { href: "/outreach", label: "Outreach", icon: Radar, badge: "callBooked" },
+      { href: "/crm", label: "CRM", icon: GitBranch, badge: "creators" },
+      { href: "/roster", label: "Roster", icon: Users, badge: "atRisk" },
+    ],
   },
   {
-    href: "/financials",
-    label: "Financials",
-    icon: Wallet,
-    badge: "queuedPayouts",
+    label: "Operations",
+    items: [
+      { href: "/tasks", label: "Tasks", icon: CheckSquare, badge: "openTasks" },
+      { href: "/content", label: "Content", icon: Clapperboard, badge: "posts" },
+      {
+        href: "/templates",
+        label: "Templates",
+        icon: FileText,
+        badge: "templates",
+      },
+      {
+        href: "/financials",
+        label: "Financials",
+        icon: Wallet,
+        badge: "queuedPayouts",
+      },
+    ],
   },
-  { href: "/systems", label: "Systems", icon: Cpu, badge: "webhooks" },
-  { href: "/settings", label: "Settings", icon: Settings },
+  {
+    label: "Platform",
+    items: [
+      { href: "/systems", label: "Systems", icon: Cpu, badge: "webhooks" },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -79,66 +96,76 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-sidebar text-white lg:static",
+            "fixed inset-y-0 left-0 z-40 flex w-[204px] flex-col bg-sidebar text-white lg:static",
             open ? "flex" : "hidden lg:flex",
           )}
         >
-          <div className="border-b border-white/10 px-4 py-4">
+          <div className="border-b border-white/10 px-3 py-3">
             <Link
               href="/"
-              className="flex items-center gap-2.5"
+              className="flex items-center gap-2"
               onClick={() => setOpen(false)}
             >
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-signal text-sm font-bold">
+              <span className="grid h-7 w-7 place-items-center rounded bg-signal text-[11px] font-bold">
                 R
               </span>
-              <div>
-                <p className="display text-xl leading-none">Relay</p>
-                <p className="mt-0.5 text-[11px] text-sidebar-muted">
-                  Creator ops
+              <div className="min-w-0">
+                <p className="display text-[1.05rem] leading-none">Relay</p>
+                <p className="mt-0.5 truncate text-[10px] text-sidebar-muted">
+                  {me?.workspaceName ?? "Creator ops"} · live
                 </p>
               </div>
             </Link>
           </div>
-          <nav className="flex flex-1 flex-col gap-0.5 p-2">
-            {NAV.map((item) => {
-              const active =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
-              const Icon = item.icon;
-              const count = item.badge && stats ? stats[item.badge] : null;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition",
-                    active
-                      ? "bg-white/10 text-white"
-                      : "text-sidebar-muted hover:bg-white/5 hover:text-white",
-                  )}
-                >
-                  <Icon size={16} />
-                  <span className="flex-1">{item.label}</span>
-                  {typeof count === "number" && count > 0 && (
-                    <span className="mono rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold">
-                      {count}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
+
+          <nav className="flex-1 overflow-y-auto px-1.5 pb-3 pt-1">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="nav-section">{group.label}</p>
+                <div className="flex flex-col gap-px">
+                  {group.items.map((item) => {
+                    const active =
+                      item.href === "/"
+                        ? pathname === "/"
+                        : pathname.startsWith(item.href);
+                    const Icon = item.icon;
+                    const count =
+                      item.badge && stats ? stats[item.badge] : null;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={cn(
+                          "flex items-center gap-2 rounded px-2 py-1.5 text-[12.5px] font-medium transition",
+                          active
+                            ? "bg-white/10 text-white"
+                            : "text-sidebar-muted hover:bg-white/[0.06] hover:text-white",
+                        )}
+                      >
+                        <Icon size={14} strokeWidth={1.75} />
+                        <span className="flex-1">{item.label}</span>
+                        {typeof count === "number" && count > 0 && (
+                          <span className="mono rounded bg-white/10 px-1.5 py-px text-[10px] font-semibold leading-4">
+                            {count}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
-          <div className="border-t border-white/10 p-3">
-            <div className="flex items-center gap-2 rounded-lg bg-white/5 px-2 py-2">
+
+          <div className="border-t border-white/10 p-2">
+            <div className="flex items-center gap-2 rounded px-1.5 py-1.5">
               <Avatar name={me?.name ?? "Ops"} size="sm" />
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
+                <p className="truncate text-[12px] font-medium">
                   {me?.name ?? "Ops"}
                 </p>
-                <p className="truncate text-[11px] text-sidebar-muted">
+                <p className="truncate text-[10px] text-sidebar-muted">
                   {me?.role ?? "Creator Ops"}
                 </p>
               </div>
@@ -147,51 +174,54 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-white/90 px-4 py-2.5 backdrop-blur md:px-6">
+          <header className="sticky top-0 z-30 flex h-11 items-center gap-2.5 border-b border-line bg-white/95 px-3 backdrop-blur md:px-4">
             <button
               type="button"
-              className="rounded-lg border border-line px-2.5 py-1.5 text-sm lg:hidden"
+              className="rounded border border-line px-2 py-1 lg:hidden"
               onClick={() => setOpen((v) => !v)}
             >
-              {open ? <X size={16} /> : <Menu size={16} />}
+              {open ? <X size={14} /> : <Menu size={14} />}
             </button>
 
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-signal-soft px-2 py-1 text-[11px] font-semibold text-signal">
+            <span className="inline-flex items-center gap-1.5 rounded border border-signal/20 bg-signal-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-signal">
               <span className="live-dot h-1.5 w-1.5 rounded-full bg-signal" />
               Live DB
             </span>
             {stats && (
-              <span className="hidden text-xs text-muted lg:inline">
-                {stats.live} live · {stats.callBooked} calls ·{" "}
-                {stats.queuedPayouts} payouts queued
+              <span className="hidden text-[11px] text-muted md:inline">
+                <span className="mono text-ink">{stats.live}</span> live ·{" "}
+                <span className="mono text-ink">{stats.callBooked}</span> calls ·{" "}
+                <span className="mono text-ink">{stats.queuedPayouts}</span>{" "}
+                payouts ·{" "}
+                <span className="mono text-ink">{stats.openTasks}</span> tasks
               </span>
             )}
 
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-1.5">
               <CommandPalette />
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setInbox((v) => !v)}
-                  className="relative rounded-lg border border-line bg-white p-2"
+                  className="relative rounded border border-line bg-white p-1.5"
                 >
-                  <Bell size={16} />
+                  <Bell size={14} />
                   {feed.length > 0 && (
-                    <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-heat px-1 text-[10px] font-bold text-white">
+                    <span className="absolute -right-1 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-heat px-1 text-[9px] font-bold text-white">
                       {Math.min(feed.length, 9)}
                     </span>
                   )}
                 </button>
                 {inbox && (
-                  <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-line bg-white shadow-lg">
-                    <div className="border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted">
+                  <div className="absolute right-0 mt-1.5 w-[320px] overflow-hidden rounded-[8px] border border-line bg-white shadow-lg">
+                    <div className="border-b border-line bg-[#f8fafc] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
                       Activity
                     </div>
                     <ul className="max-h-80 overflow-auto">
                       {feed.slice(0, 12).map((item) => (
                         <li
                           key={item.id}
-                          className="border-b border-line px-3 py-2.5 last:border-0"
+                          className="border-b border-line px-2.5 py-2 last:border-0"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <Badge>{item.kind}</Badge>
@@ -199,8 +229,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                               {formatRelative(item.at)}
                             </span>
                           </div>
-                          <p className="mt-1 text-sm font-medium">{item.title}</p>
-                          <p className="text-xs text-muted">{item.detail}</p>
+                          <p className="mt-1 text-[12px] font-medium leading-snug">
+                            {item.title}
+                          </p>
+                          <p className="text-[11px] text-muted">{item.detail}</p>
                         </li>
                       ))}
                     </ul>
@@ -209,7 +241,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </header>
-          <main className="flex-1 px-4 py-5 md:px-6 md:py-6">{children}</main>
+          <main className="flex-1 px-3 py-3 md:px-4 md:py-3.5">{children}</main>
         </div>
       </div>
     </ToastProvider>

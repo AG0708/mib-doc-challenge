@@ -66,20 +66,20 @@ export default function SettingsPage() {
     <div className="animate-rise">
       <PageHeader
         title="Settings"
-        description="Operator identity and DB health — both loaded from SQLite, not hardcoded chrome."
+        description="Operator identity and database controls."
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Prospects" value={String(stats?.prospects ?? "—")} />
-        <Stat label="Creators" value={String(stats?.creators ?? "—")} />
-        <Stat label="Open tasks" value={String(stats?.openTasks ?? "—")} />
-        <Stat label="Webhooks logged" value={String(stats?.webhooks ?? "—")} />
+      <div className="kpi-strip mb-2.5">
+        <Stat bare label="Prospects" value={String(stats?.prospects ?? "—")} />
+        <Stat bare label="Creators" value={String(stats?.creators ?? "—")} />
+        <Stat bare label="Open tasks" value={String(stats?.openTasks ?? "—")} />
+        <Stat bare label="Webhooks logged" value={String(stats?.webhooks ?? "—")} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <section className="card p-4">
+      <div className="grid gap-2.5 xl:grid-cols-2">
+        <section className="card p-2.5">
           <h2 className="text-sm font-semibold">Signed-in operator</h2>
-          <dl className="mt-3 space-y-2 text-sm">
+          <dl className="mt-2 space-y-1.5 text-sm">
             <div className="flex justify-between gap-3 border-b border-line py-2">
               <dt className="text-muted">Name</dt>
               <dd className="font-medium">{me?.name ?? "—"}</dd>
@@ -97,7 +97,7 @@ export default function SettingsPage() {
               <dd className="font-medium">{me?.team ?? "—"}</dd>
             </div>
           </dl>
-          <label className="mt-3 block text-xs font-semibold uppercase tracking-[0.08em] text-muted">
+          <label className="mt-2 block text-xs font-semibold uppercase tracking-[0.08em] text-muted">
             Switch operator
           </label>
           <Select
@@ -111,7 +111,7 @@ export default function SettingsPage() {
               </option>
             ))}
           </Select>
-          <form onSubmit={saveWorkspace} className="mt-3 flex gap-2">
+          <form onSubmit={saveWorkspace} className="mt-2 flex gap-2">
             <Field
               className="flex-1"
               placeholder={me?.workspaceName ?? "Workspace name"}
@@ -124,14 +124,14 @@ export default function SettingsPage() {
           </form>
         </section>
 
-        <section className="card p-4">
+        <section className="card p-2.5">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Data plane</h2>
             <Badge tone={health?.connected ? "signal" : "heat"}>
               {health?.connected ? "SQLite live" : "offline"}
             </Badge>
           </div>
-          <dl className="mt-3 space-y-2 text-sm">
+          <dl className="mt-2 space-y-1.5 text-sm">
             <div className="flex justify-between gap-3 border-b border-line py-2">
               <dt className="text-muted">DB path</dt>
               <dd className="mono text-xs">{stats?.dbPath ?? "data/relay.db"}</dd>
@@ -151,13 +151,13 @@ export default function SettingsPage() {
               </dd>
             </div>
           </dl>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-2.5 flex flex-wrap gap-2">
             <Button tone="heat" disabled={busy} onClick={reset}>
               {busy ? "Resetting…" : "Reset & re-seed DB"}
             </Button>
             <Button onClick={() => revalidateOps()}>Revalidate caches</Button>
           </div>
-          <p className="mt-3 text-xs text-muted">
+          <p className="mt-2 text-xs text-muted">
             Reset only affects the local SQLite file. Production should use
             Supabase with the shipped migration.
           </p>

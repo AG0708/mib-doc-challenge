@@ -132,7 +132,7 @@ export default function CreatorDetailPage({
           <div className="flex flex-wrap gap-2">
             <Link
               href="/roster"
-              className="rounded-lg border border-line bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-line bg-white px-2.5 py-1.5 text-sm"
             >
               ← Roster
             </Link>
@@ -143,7 +143,7 @@ export default function CreatorDetailPage({
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-2.5 flex flex-wrap items-center gap-2">
         <Avatar name={creator.name} />
         <Badge>{creator.stage}</Badge>
         <Badge
@@ -170,18 +170,19 @@ export default function CreatorDetailPage({
         </a>
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Revenue 30d" value={formatUsd(creator.revenue30d)} />
-        <Stat label="Views 30d" value={formatCompact(creator.views30d)} />
-        <Stat label="Installs 30d" value={formatCompact(creator.installs30d)} />
+      <div className="kpi-strip mb-2.5">
+        <Stat bare label="Revenue 30d" value={formatUsd(creator.revenue30d)} />
+        <Stat bare label="Views 30d" value={formatCompact(creator.views30d)} />
+        <Stat bare label="Installs 30d" value={formatCompact(creator.installs30d)} />
         <Stat
+          bare
           label="Cadence"
           value={`${creator.postsDone}/${creator.postsDue}`}
           hint={`${Math.round(fill * 100)}% fulfilled`}
         />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-1.5">
+      <div className="mb-2.5 flex flex-wrap gap-1.5">
         {(["elite", "strong", "watch", "at_risk"] as const).map((s) => (
           <Button
             key={s}
@@ -194,12 +195,12 @@ export default function CreatorDetailPage({
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
+      <div className="grid gap-2.5 xl:grid-cols-2">
+        <section className="card p-2.5">
+          <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
             Notes
           </h2>
-          <form onSubmit={addNote} className="mb-3 flex gap-2">
+          <form onSubmit={addNote} className="mb-2 flex gap-2">
             <Field
               className="flex-1"
               placeholder="Add an ops note…"
@@ -210,7 +211,7 @@ export default function CreatorDetailPage({
               Add
             </Button>
           </form>
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {(payload?.notes ?? []).map((n) => (
               <li key={n.id} className="rounded-lg border border-line bg-bg px-3 py-2">
                 <div className="flex justify-between gap-2 text-xs text-muted">
@@ -226,8 +227,8 @@ export default function CreatorDetailPage({
           </ul>
         </section>
 
-        <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
+        <section className="card p-2.5">
+          <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
             Log post
           </h2>
           <form onSubmit={logPost} className="mb-3 grid gap-2">
@@ -272,7 +273,7 @@ export default function CreatorDetailPage({
               </Button>
             </div>
           </form>
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {(payload?.posts ?? []).map((p) => (
               <li
                 key={p.id}
@@ -296,15 +297,15 @@ export default function CreatorDetailPage({
           </ul>
         </section>
 
-        <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
+        <section className="card p-2.5">
+          <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
             Tasks
           </h2>
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {(payload?.tasks ?? []).map((t) => (
               <li
                 key={t.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm"
               >
                 <span className={t.status === "done" ? "line-through text-muted" : ""}>
                   {t.title}
@@ -320,15 +321,15 @@ export default function CreatorDetailPage({
           </ul>
         </section>
 
-        <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
+        <section className="card p-2.5">
+          <h2 className="mb-1.5 text-sm font-semibold uppercase tracking-[0.08em] text-muted">
             Payouts
           </h2>
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {(payload?.payouts ?? []).map((p) => (
               <li
                 key={p.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm"
               >
                 <span>
                   {p.period} · {formatUsd(p.amount)}

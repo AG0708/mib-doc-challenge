@@ -69,16 +69,16 @@ export default function ContentPage() {
     <div className="animate-rise">
       <PageHeader
         title="Content"
-        description="Post ledger across the roster — logging a post bumps creator cadence in the DB."
+        description="Post ledger — logging a post bumps creator cadence."
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat label="Logged posts" value={String(posts.length)} />
-        <Stat label="Views" value={formatCompact(totalViews)} />
-        <Stat label="Attributed installs" value={formatCompact(totalInstalls)} />
+      <div className="kpi-strip cols-3 mb-2.5">
+        <Stat bare label="Logged posts" value={String(posts.length)} />
+        <Stat bare label="Views" value={formatCompact(totalViews)} />
+        <Stat bare label="Attributed installs" value={formatCompact(totalInstalls)} />
       </div>
 
-      <form onSubmit={logPost} className="card mb-4 grid gap-2 p-4 sm:grid-cols-3">
+      <form onSubmit={logPost} className="card mb-2.5 grid gap-2 p-4 sm:grid-cols-3">
         <Select
           required
           value={form.creatorId}
@@ -131,22 +131,22 @@ export default function ContentPage() {
 
       {isLoading && <Empty label="Loading posts…" />}
 
-      <div className="overflow-hidden rounded-xl border border-line bg-white">
+      <div className="overflow-hidden rounded-[8px] border border-line bg-white">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-line bg-bg text-[11px] uppercase tracking-[0.08em] text-muted">
             <tr>
-              <th className="px-3 py-2 font-semibold">Creator</th>
-              <th className="px-3 py-2 font-semibold">Platform</th>
-              <th className="px-3 py-2 font-semibold">Caption</th>
-              <th className="px-3 py-2 font-semibold">Views</th>
-              <th className="px-3 py-2 font-semibold">Installs</th>
-              <th className="px-3 py-2 font-semibold">Posted</th>
+              <th className="px-2.5 py-1.5 font-semibold">Creator</th>
+              <th className="px-2.5 py-1.5 font-semibold">Platform</th>
+              <th className="px-2.5 py-1.5 font-semibold">Caption</th>
+              <th className="px-2.5 py-1.5 font-semibold">Views</th>
+              <th className="px-2.5 py-1.5 font-semibold">Installs</th>
+              <th className="px-2.5 py-1.5 font-semibold">Posted</th>
             </tr>
           </thead>
           <tbody>
             {posts.map((p) => (
               <tr key={p.id} className="border-b border-line last:border-0">
-                <td className="px-3 py-2.5">
+                <td className="px-2.5 py-1.5">
                   <Link
                     href={`/creators/${p.creatorId}`}
                     className="font-medium hover:text-signal"
@@ -155,13 +155,13 @@ export default function ContentPage() {
                   </Link>
                   <p className="text-xs text-muted">{p.creatorHandle}</p>
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-2.5 py-1.5">
                   <Badge>{p.platform}</Badge>
                 </td>
-                <td className="max-w-xs truncate px-3 py-2.5">{p.caption}</td>
-                <td className="mono px-3 py-2.5">{formatCompact(p.views)}</td>
-                <td className="mono px-3 py-2.5">{formatCompact(p.installs)}</td>
-                <td className="px-3 py-2.5 text-muted">
+                <td className="max-w-xs truncate px-2.5 py-1.5">{p.caption}</td>
+                <td className="mono px-2.5 py-1.5">{formatCompact(p.views)}</td>
+                <td className="mono px-2.5 py-1.5">{formatCompact(p.installs)}</td>
+                <td className="px-2.5 py-1.5 text-muted">
                   {formatRelative(p.postedAt)}
                 </td>
               </tr>

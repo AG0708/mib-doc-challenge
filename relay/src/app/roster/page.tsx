@@ -71,9 +71,9 @@ export default function RosterPage() {
     <div className="animate-rise">
       <PageHeader
         title="Roster"
-        description="Active creators — cadence, standing, and attributed outcomes from the database."
+        description="Live roster — cadence, standing, attributed outcomes."
         action={
-          <div className="flex gap-2">
+          <>
             <Select value={standing} onChange={(e) => setStanding(e.target.value)}>
               <option value="all">All standing</option>
               <option value="elite">Elite</option>
@@ -86,14 +86,15 @@ export default function RosterPage() {
               <option value="views">Sort · views</option>
               <option value="cadence">Sort · cadence risk</option>
             </Select>
-          </div>
+          </>
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat label="Active roster" value={String(list.length)} />
-        <Stat label="Avg fulfillment" value={`${fulfillment}%`} />
+      <div className="kpi-strip cols-3 mb-2.5">
+        <Stat bare label="Active roster" value={String(list.length)} />
+        <Stat bare label="Avg fulfillment" value={`${fulfillment}%`} />
         <Stat
+          bare
           label="Roster revenue 30d"
           value={formatUsd(list.reduce((s, c) => s + c.revenue30d, 0))}
         />
@@ -101,19 +102,19 @@ export default function RosterPage() {
 
       {isLoading && <Empty label="Loading roster…" />}
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         {list.map((c) => {
           const fill = c.postsDue ? Math.min(1, c.postsDone / c.postsDue) : 0;
           return (
-            <article key={c.id} className="card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <Avatar name={c.name} />
+            <article key={c.id} className="card p-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-start gap-2">
+                  <Avatar name={c.name} size="sm" />
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <Link
                         href={`/creators/${c.id}`}
-                        className="font-semibold hover:text-signal"
+                        className="text-[12.5px] font-semibold hover:text-signal"
                       >
                         {c.name}
                       </Link>
@@ -127,47 +128,47 @@ export default function RosterPage() {
                         {c.standing.replace("_", " ")}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted">
+                    <p className="text-[11px] text-muted">
                       {c.handle} · {c.manager} · {c.rate}
                     </p>
-                    <p className="mono mt-0.5 text-[11px] text-muted">
+                    <p className="mono text-[10px] text-muted">
                       Last post{" "}
                       {c.lastPostAt ? formatRelative(c.lastPostAt) : "—"}
                     </p>
                   </div>
                 </div>
-                <p className="mono text-right text-sm font-semibold">
+                <p className="mono text-right text-[12px] font-semibold">
                   {formatUsd(c.revenue30d)}
                 </p>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                <div className="rounded-lg bg-bg px-2 py-2">
-                  <p className="text-[11px] text-muted">Views</p>
+              <div className="mt-2 grid grid-cols-3 gap-1 text-[11px]">
+                <div className="rounded border border-line bg-bg px-1.5 py-1">
+                  <p className="text-[10px] text-muted">Views</p>
                   <p className="mono font-semibold">
                     {formatCompact(c.views30d)}
                   </p>
                 </div>
-                <div className="rounded-lg bg-bg px-2 py-2">
-                  <p className="text-[11px] text-muted">Installs</p>
+                <div className="rounded border border-line bg-bg px-1.5 py-1">
+                  <p className="text-[10px] text-muted">Installs</p>
                   <p className="mono font-semibold">
                     {formatCompact(c.installs30d)}
                   </p>
                 </div>
-                <div className="rounded-lg bg-bg px-2 py-2">
-                  <p className="text-[11px] text-muted">Web</p>
+                <div className="rounded border border-line bg-bg px-1.5 py-1">
+                  <p className="text-[10px] text-muted">Web</p>
                   <p className="mono font-semibold">
                     {formatCompact(c.webVisits30d)}
                   </p>
                 </div>
               </div>
-              <div className="mt-3">
-                <div className="mb-1 flex justify-between text-xs">
+              <div className="mt-2">
+                <div className="mb-1 flex justify-between text-[10px]">
                   <span className="text-muted">Cadence</span>
                   <span className="mono">
                     {c.postsDone}/{c.postsDue}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-line">
+                <div className="h-1 overflow-hidden rounded-full bg-line">
                   <div
                     className={cn(
                       "h-full rounded-full",
@@ -181,10 +182,10 @@ export default function RosterPage() {
                   />
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              <div className="mt-2 flex flex-wrap gap-1">
                 <Link
                   href={`/creators/${c.id}`}
-                  className="rounded-lg border border-line bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-bg"
+                  className="rounded border border-line bg-white px-2 py-1 text-[11px] font-medium hover:bg-bg"
                 >
                   Open
                 </Link>

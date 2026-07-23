@@ -90,11 +90,11 @@ export function CommandPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="hidden items-center gap-2 rounded-lg border border-line bg-white px-2.5 py-1.5 text-sm text-muted hover:bg-bg md:inline-flex"
+        className="hidden items-center gap-1.5 rounded border border-line bg-white px-2 py-1 text-[12px] text-muted hover:bg-bg md:inline-flex"
       >
-        <Search size={14} />
+        <Search size={13} />
         <span>Search</span>
-        <kbd className="mono rounded border border-line bg-bg px-1.5 py-0.5 text-[10px]">
+        <kbd className="mono rounded border border-line bg-bg px-1 py-px text-[10px]">
           ⌘K
         </kbd>
       </button>
@@ -102,21 +102,21 @@ export function CommandPalette() {
       <AnimatePresence>
         {open && (
           <motion.div
-            className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/40 px-4 pt-[12vh]"
+            className="fixed inset-0 z-[70] flex items-start justify-center bg-ink/45 px-4 pt-[10vh]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setOpen(false)}
           >
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 6 }}
-              className="w-full max-w-lg overflow-hidden rounded-xl border border-line bg-white shadow-2xl"
+              exit={{ opacity: 0, y: 4 }}
+              className="w-full max-w-md overflow-hidden rounded-[8px] border border-line bg-white shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center gap-2 border-b border-line px-3">
-                <Search size={16} className="text-muted" />
+              <div className="flex items-center gap-2 border-b border-line px-2.5">
+                <Search size={14} className="text-muted" />
                 <input
                   autoFocus
                   value={q}
@@ -132,11 +132,11 @@ export function CommandPalette() {
                     }
                     if (e.key === "Enter" && items[active]) go(items[active].href);
                   }}
-                  placeholder="Search creators, prospects, pages…"
-                  className="w-full bg-transparent py-3.5 text-sm outline-none"
+                  placeholder="Jump to creators, prospects, pages…"
+                  className="w-full bg-transparent py-2.5 text-[13px] outline-none"
                 />
               </div>
-              <ul className="max-h-80 overflow-auto p-1.5">
+              <ul className="max-h-80 overflow-auto p-1">
                 {items.map((item, i) => {
                   const Icon = item.icon;
                   return (
@@ -146,18 +146,18 @@ export function CommandPalette() {
                         onMouseEnter={() => setActive(i)}
                         onClick={() => go(item.href)}
                         className={cn(
-                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left",
+                          "flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left",
                           i === active ? "bg-ink text-white" : "hover:bg-bg",
                         )}
                       >
-                        <Icon size={16} />
+                        <Icon size={14} />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-semibold">
+                          <span className="block text-[12.5px] font-semibold">
                             {item.title}
                           </span>
                           <span
                             className={cn(
-                              "block truncate text-xs",
+                              "block truncate text-[11px]",
                               i === active ? "text-white/70" : "text-muted",
                             )}
                           >
@@ -169,7 +169,7 @@ export function CommandPalette() {
                   );
                 })}
                 {items.length === 0 && (
-                  <li className="px-3 py-8 text-center text-sm text-muted">
+                  <li className="px-3 py-6 text-center text-[12px] text-muted">
                     No matches
                   </li>
                 )}

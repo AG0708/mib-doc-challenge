@@ -94,7 +94,7 @@ export default function TasksPage() {
     <div className="animate-rise">
       <PageHeader
         title="Tasks"
-        description="Ops work queue tied to creators and prospects — persists in SQLite."
+        description="Ops work queue linked to creators and prospects."
         action={
           <div className="flex gap-2">
             <Select value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -117,19 +117,21 @@ export default function TasksPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <div className="kpi-strip cols-3 mb-2.5">
         <Stat
+          bare
           label="Open"
           value={String(all.filter((t) => t.status === "open").length)}
         />
-        <Stat label="Overdue" value={String(overdue)} />
+        <Stat bare label="Overdue" value={String(overdue)} />
         <Stat
+          bare
           label="Done"
           value={String(all.filter((t) => t.status === "done").length)}
         />
       </div>
 
-      <form onSubmit={createTask} className="card mb-4 grid gap-2 p-4 sm:grid-cols-4">
+      <form onSubmit={createTask} className="card mb-2.5 grid gap-2 p-4 sm:grid-cols-4">
         <Field
           required
           className="sm:col-span-2"
@@ -165,7 +167,7 @@ export default function TasksPage() {
 
       {isLoading && <Empty label="Loading tasks…" />}
 
-      <ul className="space-y-2">
+      <ul className="space-y-1.5">
         {tasks.map((t) => (
           <TaskRowItem
             key={t.id}

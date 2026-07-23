@@ -234,14 +234,14 @@ export default function OutreachPage() {
     <div className="animate-rise">
       <PageHeader
         title="Outreach"
-        description="Source → booked call. Drag cards, bulk-move, import CSV, or fire a template — every change writes to the database."
+        description="Prospect funnel — drag stages, bulk move, import CSV, convert to CRM."
         action={
-          <div className="flex flex-wrap gap-2">
+          <>
             <Field
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search…"
-              className="w-40"
+              className="w-36"
             />
             <Select value={owner} onChange={(e) => setOwner(e.target.value)}>
               <option value="all">All owners</option>
@@ -251,17 +251,19 @@ export default function OutreachPage() {
                 </option>
               ))}
             </Select>
-            <Button onClick={() => setShowImport((v) => !v)}>Import</Button>
-            <Button tone="ink" onClick={() => setShowAdd((v) => !v)}>
+            <Button size="sm" onClick={() => setShowImport((v) => !v)}>
+              Import
+            </Button>
+            <Button size="sm" tone="ink" onClick={() => setShowAdd((v) => !v)}>
               Source
             </Button>
-          </div>
+          </>
         }
       />
 
       {selectedIds.length > 0 && (
-        <div className="card mb-4 flex flex-wrap items-center gap-2 p-3">
-          <span className="text-sm font-medium">
+        <div className="card mb-2.5 flex flex-wrap items-center gap-2 px-2.5 py-1.5">
+          <span className="text-[12px] font-medium">
             {selectedIds.length} selected
           </span>
           <Select
@@ -282,13 +284,13 @@ export default function OutreachPage() {
       )}
 
       {showImport && (
-        <form onSubmit={importCsv} className="card mb-4 space-y-2 p-4">
-          <p className="text-sm text-muted">
-            CSV headers: name, handle, platform, followers, niche, owner, score
+        <form onSubmit={importCsv} className="card mb-2.5 space-y-1.5 p-2.5">
+          <p className="text-[11px] text-muted">
+            CSV: name, handle, platform, followers, niche, owner, score
           </p>
           <textarea
-            rows={6}
-            className="w-full rounded-lg border border-line px-3 py-2 font-mono text-xs outline-none focus:border-ink/30"
+            rows={4}
+            className="w-full rounded border border-line px-2 py-1.5 font-mono text-[11px] outline-none focus:border-ink/30"
             value={csv}
             onChange={(e) => setCsv(e.target.value)}
           />
@@ -304,7 +306,7 @@ export default function OutreachPage() {
       )}
 
       {showAdd && (
-        <form onSubmit={createProspect} className="card mb-4 grid gap-2 p-4 sm:grid-cols-3">
+        <form onSubmit={createProspect} className="card mb-2.5 grid gap-1.5 p-2.5 sm:grid-cols-3">
           <Field
             required
             placeholder="Name"
@@ -371,7 +373,7 @@ export default function OutreachPage() {
             onDragLeave={() => setDragOver(null)}
             onDrop={(e) => onDrop(stage.id, e)}
             className={cn(
-              "card flex w-[250px] shrink-0 flex-col p-2.5",
+              "card flex w-[220px] shrink-0 flex-col p-2.5",
               dragOver === stage.id && "ring-2 ring-signal/40",
             )}
           >
@@ -383,7 +385,7 @@ export default function OutreachPage() {
                 {(byStage[stage.id] ?? []).length}
               </span>
             </div>
-            <div className="flex min-h-[100px] flex-col gap-2">
+            <div className="flex min-h-[72px] flex-col gap-2">
               {(byStage[stage.id] ?? []).map((p) => (
                 <div
                   key={p.id}
@@ -392,7 +394,7 @@ export default function OutreachPage() {
                     e.dataTransfer.setData("text/prospect-id", p.id)
                   }
                   className={cn(
-                    "rounded-lg border px-2.5 py-2.5 text-left transition",
+                    "rounded-lg border px-2.5 py-1.5 text-left transition",
                     selected?.id === p.id
                       ? "border-signal bg-signal-soft"
                       : "border-line bg-white hover:bg-bg",
@@ -447,19 +449,19 @@ export default function OutreachPage() {
       </div>
 
       {selected && (
-        <aside className="card mt-4 p-4">
+        <aside className="card mt-2.5 p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-3">
                 <Avatar name={selected.name} />
                 <div>
-                  <h3 className="text-xl font-semibold">{selected.name}</h3>
+                  <h3 className="text-[15px] font-semibold">{selected.name}</h3>
                   <p className="text-sm text-muted">
                     {selected.handle} · {selected.niche} · {selected.owner}
                   </p>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Meta label="Score" value={String(selected.score)} />
                 <Meta
                   label="Followers"
@@ -472,7 +474,7 @@ export default function OutreachPage() {
                 <Meta label="Source" value={selected.source ?? "—"} />
               </div>
               <textarea
-                className="mt-3 w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink/30"
+                className="mt-2 w-full rounded-lg border border-line px-2.5 py-1.5 text-sm outline-none focus:border-ink/30"
                 rows={3}
                 value={selected.notes}
                 onChange={async (e) => {
@@ -481,7 +483,7 @@ export default function OutreachPage() {
                   await patch(selected.id, { notes });
                 }}
               />
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <Button tone="signal" onClick={() => move(selected.id, "call_booked")}>
                   Book call
                 </Button>
@@ -498,7 +500,7 @@ export default function OutreachPage() {
                 </Button>
               </div>
 
-              <div className="mt-4 border-t border-line pt-4">
+              <div className="mt-2.5 border-t border-line pt-4">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
                   Compose from template
                 </p>
@@ -514,7 +516,7 @@ export default function OutreachPage() {
                   ))}
                 </div>
                 <textarea
-                  className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink/30"
+                  className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm outline-none focus:border-ink/30"
                   rows={3}
                   placeholder="Message draft…"
                   value={compose}
@@ -527,7 +529,7 @@ export default function OutreachPage() {
                 </div>
               </div>
 
-              <div className="mt-4 border-t border-line pt-4">
+              <div className="mt-2.5 border-t border-line pt-4">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
                   Thread notes
                 </p>
@@ -542,11 +544,11 @@ export default function OutreachPage() {
                     Add
                   </Button>
                 </form>
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {notes.map((n) => (
                     <li
                       key={n.id}
-                      className="rounded-lg border border-line bg-bg px-3 py-2 text-sm"
+                      className="rounded-lg border border-line bg-bg px-2.5 py-1.5 text-sm"
                     >
                       <div className="flex justify-between text-xs text-muted">
                         <span>{n.author}</span>

@@ -67,10 +67,10 @@ export default function TemplatesPage() {
     <div className="animate-rise">
       <PageHeader
         title="Templates"
-        description="Reusable DM / email / Slack copy with merge fields. Edit and preview against a prospect name."
+        description="DM / email / Slack copy with merge fields."
       />
 
-      <form onSubmit={createTemplate} className="card mb-4 grid gap-2 p-4">
+      <form onSubmit={createTemplate} className="card mb-2.5 grid gap-2 p-4">
         <div className="grid gap-2 sm:grid-cols-3">
           <Field
             required
@@ -93,7 +93,7 @@ export default function TemplatesPage() {
         <textarea
           required
           rows={3}
-          className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink/30"
+          className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm outline-none focus:border-ink/30"
           placeholder="Body — use {{name}}, {{niche}}, {{deepLink}}…"
           value={form.body}
           onChange={(e) => setForm({ ...form, body: e.target.value })}
@@ -102,7 +102,7 @@ export default function TemplatesPage() {
 
       {isLoading && <Empty label="Loading templates…" />}
 
-      <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+      <div className="grid gap-2.5 lg:grid-cols-[240px_1fr]">
         <ul className="card divide-y divide-line overflow-hidden">
           {templates.map((t) => (
             <li key={t.id}>
@@ -124,10 +124,10 @@ export default function TemplatesPage() {
         </ul>
 
         {active ? (
-          <div className="card p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="card p-2.5">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-lg font-semibold">{active.name}</h2>
+                <h2 className="text-[13px] font-semibold">{active.name}</h2>
                 <p className="text-xs text-muted">
                   Updated {formatRelative(active.updatedAt)}
                 </p>
@@ -146,7 +146,7 @@ export default function TemplatesPage() {
             </div>
             <textarea
               rows={6}
-              className="mb-3 w-full rounded-lg border border-line px-3 py-2 font-mono text-sm outline-none focus:border-ink/30"
+              className="mb-3 w-full rounded-lg border border-line px-2.5 py-1.5 font-mono text-sm outline-none focus:border-ink/30"
               value={draft || active.body}
               onChange={(e) => setDraft(e.target.value)}
               onFocus={() => {

@@ -83,7 +83,7 @@ export default function FinancialsPage() {
     <div className="animate-rise">
       <PageHeader
         title="Financials"
-        description="Payroll ledger and attribution charts — every status change is persisted."
+        description="Payroll ledger — generate periods, process batches, export CSV."
         action={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -158,62 +158,76 @@ export default function FinancialsPage() {
         }
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="kpi-strip mb-2.5">
         <Stat
+          bare
           label="Revenue 30d"
           value={formatUsd(metricsData?.data.totals.revenue ?? 0)}
         />
-        <Stat label="Payroll queued" value={formatUsd(payrollDue)} />
-        <Stat label="Paid this cycle" value={formatUsd(paid)} />
-        <Stat label="On hold" value={formatUsd(held)} />
+        <Stat bare label="Payroll queued" value={formatUsd(payrollDue)} />
+        <Stat bare label="Paid this cycle" value={formatUsd(paid)} />
+        <Stat bare label="On hold" value={formatUsd(held)} />
       </div>
 
-      <div className="mb-4 grid gap-4 xl:grid-cols-2">
-        <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold">Creator attribution</h2>
-          <div className="h-[240px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={attribution}>
-                <CartesianGrid stroke="#e5e7eb" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => formatCompact(Number(v))} width={40} />
-                <Tooltip />
-                <Bar dataKey="installs" fill="#059669" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="webVisits" fill="#111827" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      <div className="mb-2.5 grid gap-2.5 xl:grid-cols-2">
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">Creator attribution</h2>
+          </div>
+          <div className="p-2">
+            <div className="h-[190px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={attribution}>
+                  <CartesianGrid stroke="#e8edf2" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    tickFormatter={(v) => formatCompact(Number(v))}
+                    width={36}
+                    tick={{ fontSize: 10 }}
+                  />
+                  <Tooltip />
+                  <Bar dataKey="installs" fill="#0f766e" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="webVisits" fill="#0b1220" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </section>
-        <section className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold">Daily revenue</h2>
-          <div className="h-[240px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={metricsData?.data.metrics ?? []}>
-                <CartesianGrid stroke="#e5e7eb" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={(v) => String(v).slice(5)}
-                  tick={{ fontSize: 11 }}
-                />
-                <YAxis
-                  tickFormatter={(v) => `$${formatCompact(Number(v))}`}
-                  width={48}
-                />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#111827"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">Daily revenue</h2>
+          </div>
+          <div className="p-2">
+            <div className="h-[190px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={metricsData?.data.metrics ?? []}>
+                  <CartesianGrid stroke="#e8edf2" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(v) => String(v).slice(5)}
+                    tick={{ fontSize: 10 }}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => `$${formatCompact(Number(v))}`}
+                    width={42}
+                    tick={{ fontSize: 10 }}
+                  />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#0b1220"
+                    strokeWidth={1.75}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </section>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <div className="mb-2 flex flex-wrap gap-1.5">
         {["all", "queued", "processing", "paid", "hold"].map((s) => (
           <button
             key={s}
@@ -236,30 +250,30 @@ export default function FinancialsPage() {
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead className="border-b border-line bg-bg text-[11px] uppercase tracking-[0.1em] text-muted">
               <tr>
-                <th className="px-3 py-2.5 font-medium">Creator</th>
-                <th className="px-3 py-2.5 font-medium">Period</th>
-                <th className="px-3 py-2.5 font-medium">Views</th>
-                <th className="px-3 py-2.5 font-medium">Amount</th>
-                <th className="px-3 py-2.5 font-medium">Status</th>
-                <th className="px-3 py-2.5 font-medium">Updated</th>
-                <th className="px-3 py-2.5 font-medium">Actions</th>
+                <th className="px-2.5 py-1.5 font-medium">Creator</th>
+                <th className="px-2.5 py-1.5 font-medium">Period</th>
+                <th className="px-2.5 py-1.5 font-medium">Views</th>
+                <th className="px-2.5 py-1.5 font-medium">Amount</th>
+                <th className="px-2.5 py-1.5 font-medium">Status</th>
+                <th className="px-2.5 py-1.5 font-medium">Updated</th>
+                <th className="px-2.5 py-1.5 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id} className="border-b border-line">
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-1.5">
                     <div className="flex items-center gap-2">
                       <Avatar name={p.creatorName} size="sm" />
                       <span className="font-medium">{p.creatorName}</span>
                     </div>
                   </td>
-                  <td className="mono px-3 py-2.5 text-muted">{p.period}</td>
-                  <td className="mono px-3 py-2.5">{formatCompact(p.views)}</td>
-                  <td className="mono px-3 py-2.5 font-semibold">
+                  <td className="mono px-2.5 py-1.5 text-muted">{p.period}</td>
+                  <td className="mono px-2.5 py-1.5">{formatCompact(p.views)}</td>
+                  <td className="mono px-2.5 py-1.5 font-semibold">
                     {formatUsd(p.amount)}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-1.5">
                     <Badge
                       tone={
                         STATUS_TONE[p.status as keyof typeof STATUS_TONE] ??
@@ -269,10 +283,10 @@ export default function FinancialsPage() {
                       {p.status}
                     </Badge>
                   </td>
-                  <td className="mono px-3 py-2.5 text-muted">
+                  <td className="mono px-2.5 py-1.5 text-muted">
                     {formatRelative(p.updatedAt)}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-2.5 py-1.5">
                     <div className="flex flex-wrap gap-1">
                       {p.status !== "paid" && (
                         <Button

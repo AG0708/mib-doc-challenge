@@ -97,35 +97,40 @@ export default function CrmPage() {
     <div className="animate-rise">
       <PageHeader
         title="CRM"
-        description="Onboarding pipeline backed by the creators table. Stage changes persist and fan out to activity."
+        description="Creator onboarding pipeline — stage changes write to SQLite and activity."
         action={
-          <Button tone="ink" onClick={() => setShowAdd((v) => !v)}>
+          <Button size="sm" tone="ink" onClick={() => setShowAdd((v) => !v)}>
             Add creator
           </Button>
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-2.5 grid grid-cols-3 gap-px overflow-hidden rounded-[8px] border border-line bg-line md:grid-cols-6">
         {funnel.map((s) => (
           <button
             key={s.id}
             type="button"
             onClick={() => setStage((cur) => (cur === s.id ? "all" : s.id))}
             className={cn(
-              "card px-3 py-3 text-left",
-              stage === s.id && "ring-2 ring-ink",
+              "bg-white px-2.5 py-2 text-left hover:bg-[#f8fafc]",
+              stage === s.id && "bg-ink text-white hover:bg-ink",
             )}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            <p
+              className={cn(
+                "text-[10px] font-semibold uppercase tracking-[0.08em]",
+                stage === s.id ? "text-white/65" : "text-muted",
+              )}
+            >
               {s.label}
             </p>
-            <p className="mono mt-1 text-2xl font-semibold">{s.count}</p>
+            <p className="mono mt-0.5 text-lg font-semibold">{s.count}</p>
           </button>
         ))}
       </div>
 
       {showAdd && (
-        <form onSubmit={createCreator} className="card mb-4 grid gap-2 p-4 sm:grid-cols-3">
+        <form onSubmit={createCreator} className="card mb-2.5 grid gap-2 p-4 sm:grid-cols-3">
           <Field
             required
             placeholder="Name"
@@ -167,7 +172,7 @@ export default function CrmPage() {
         </form>
       )}
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-2.5 flex flex-wrap gap-2">
         <Field
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -186,17 +191,17 @@ export default function CrmPage() {
 
       {isLoading && <Empty label="Loading creators from DB…" />}
 
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
+      <div className="grid gap-2.5 xl:grid-cols-[1.35fr_0.9fr]">
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="border-b border-line bg-bg text-[11px] uppercase tracking-[0.1em] text-muted">
+            <table className="dense-table min-w-[680px] text-[12px]">
+              <thead>
                 <tr>
-                  <th className="px-3 py-2.5 font-medium">Creator</th>
-                  <th className="px-3 py-2.5 font-medium">Stage</th>
-                  <th className="px-3 py-2.5 font-medium">Manager</th>
-                  <th className="px-3 py-2.5 font-medium">Views</th>
-                  <th className="px-3 py-2.5 font-medium">Joined</th>
+                  <th>Creator</th>
+                  <th>Stage</th>
+                  <th>Manager</th>
+                  <th>Views</th>
+                  <th>Joined</th>
                 </tr>
               </thead>
               <tbody>
@@ -209,7 +214,7 @@ export default function CrmPage() {
                       active?.id === c.id && "bg-signal-soft/50",
                     )}
                   >
-                    <td className="px-3 py-2.5">
+                    <td className="px-2.5 py-1.5">
                       <div className="flex items-center gap-2">
                         <Avatar name={c.name} size="sm" />
                         <div>
@@ -218,17 +223,17 @@ export default function CrmPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-2.5 py-1.5">
                       <Badge tone={STAGE_TONE[c.stage] ?? "neutral"}>
                         {CRM_STAGES.find((s) => s.id === c.stage)?.label ??
                           c.stage}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2.5 text-ink-soft">{c.manager}</td>
-                    <td className="mono px-3 py-2.5">
+                    <td className="px-2.5 py-1.5 text-ink-soft">{c.manager}</td>
+                    <td className="mono px-2.5 py-1.5">
                       {formatCompact(c.views30d)}
                     </td>
-                    <td className="mono px-3 py-2.5 text-muted">
+                    <td className="mono px-2.5 py-1.5 text-muted">
                       {dateOnly(c.joinedAt)}
                     </td>
                   </tr>
@@ -239,11 +244,11 @@ export default function CrmPage() {
         </div>
 
         {active && (
-          <aside className="card p-4">
+          <aside className="card p-2.5">
             <div className="flex items-start gap-3">
               <Avatar name={active.name} />
               <div>
-                <h3 className="text-xl font-semibold">{active.name}</h3>
+                <h3 className="text-[15px] font-semibold">{active.name}</h3>
                 <p className="text-sm text-muted">
                   {active.handle} · {active.city} · {active.platform}
                 </p>
@@ -256,11 +261,11 @@ export default function CrmPage() {
               href={active.deepLink}
               target="_blank"
               rel="noreferrer"
-              className="mt-3 block truncate rounded-lg border border-line bg-bg px-3 py-2 text-xs text-signal"
+              className="mt-2 block truncate rounded-lg border border-line bg-bg px-2.5 py-1.5 text-xs text-signal"
             >
               {active.deepLink}
             </a>
-            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
               <div className="rounded-lg border border-line bg-bg p-2.5">
                 <dt className="text-xs text-muted">Standing</dt>
                 <dd className="mt-0.5 font-semibold capitalize">
@@ -286,10 +291,10 @@ export default function CrmPage() {
                 <dd className="mt-0.5 font-semibold">{active.rate}</dd>
               </div>
             </dl>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-2">
               <Link
                 href={`/creators/${active.id}`}
-                className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium hover:bg-bg"
+                className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-2.5 py-1.5 text-sm font-medium hover:bg-bg"
               >
                 Full profile
               </Link>
@@ -300,7 +305,7 @@ export default function CrmPage() {
                 Go live
               </Button>
             </div>
-            <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+            <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
               Move stage
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">

@@ -34,15 +34,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[80] flex w-[320px] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-3 right-3 z-[80] flex w-[280px] flex-col gap-1.5">
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div
               key={t.id}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className={`pointer-events-auto rounded-xl border bg-white px-3 py-2.5 shadow-lg ${
+              className={`pointer-events-auto rounded-[6px] border bg-white px-2.5 py-2 shadow-md ${
                 t.tone === "bad"
                   ? "border-heat/30"
                   : t.tone === "warn"
@@ -52,9 +52,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold">{t.title}</p>
+                  <p className="text-[12px] font-semibold">{t.title}</p>
                   {t.detail && (
-                    <p className="text-xs text-muted">{t.detail}</p>
+                    <p className="text-[11px] text-muted">{t.detail}</p>
                   )}
                 </div>
                 <button

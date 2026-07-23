@@ -89,17 +89,17 @@ export default function SystemsPage() {
     <div className="animate-rise">
       <PageHeader
         title="Systems"
-        description="Fully connected data plane: UI → signed /api → SQLite (Supabase-ready). No client-side fake stores."
+        description="UI → signed /api → SQLite. Supabase-ready schema + HMAC ingress."
       />
 
-      <div className="mb-4 grid gap-4 xl:grid-cols-2">
-        <section className="card p-4">
+      <div className="mb-2.5 grid gap-2.5 xl:grid-cols-2">
+        <section className="card p-2.5">
           <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
                 Health
               </p>
-              <h2 className="text-lg font-semibold">Live DB connection</h2>
+              <h2 className="text-[13px] font-semibold">Live DB connection</h2>
             </div>
             <Badge tone={health?.connected ? "signal" : "heat"}>
               {health?.connected ? "connected" : "down"}
@@ -108,7 +108,7 @@ export default function SystemsPage() {
           <p className="mono text-xs text-muted">
             {health?.driver ?? "…"} · journal {String(health?.journalMode ?? "…")}
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+          <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
             {Object.entries(tables).map(([name, count]) => (
               <div key={name} className="rounded-lg border border-line bg-bg px-2.5 py-2">
                 <p className="mono font-semibold">{name}</p>
@@ -116,7 +116,7 @@ export default function SystemsPage() {
               </div>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button onClick={() => mutateHealth()}>Refresh health</Button>
             <Button tone="signal" onClick={ingestToday}>
               Ingest today metrics
@@ -124,19 +124,19 @@ export default function SystemsPage() {
           </div>
         </section>
 
-        <section className="card p-4">
-          <div className="mb-3 flex items-center justify-between">
+        <section className="card p-2.5">
+          <div className="mb-2 flex items-center justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
                 Live endpoint
               </p>
-              <h2 className="text-lg font-semibold">
+              <h2 className="text-[13px] font-semibold">
                 POST /api/webhooks/onboarding
               </h2>
             </div>
             <Badge tone="signal">HMAC</Badge>
           </div>
-          <p className="mb-3 text-xs text-muted">
+          <p className="mb-1.5 text-xs text-muted">
             Browser calls <span className="mono">/simulate</span> — server signs with{" "}
             <span className="mono">RELAY_WEBHOOK_SECRET</span> (secret never leaves the API).
           </p>
@@ -156,7 +156,7 @@ export default function SystemsPage() {
               <option value="go_live">go_live</option>
             </Select>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button tone="ink" disabled={busy || !creatorId} onClick={() => fire(true)}>
               {busy ? "Sending…" : "Send signed webhook"}
             </Button>
@@ -165,20 +165,20 @@ export default function SystemsPage() {
             </Button>
           </div>
           {last && (
-            <pre className="mono mt-3 max-h-48 overflow-auto rounded-lg bg-sidebar p-3 text-[11px] text-white/90">
+            <pre className="mono mt-2 max-h-48 overflow-auto rounded-lg bg-sidebar p-3 text-[11px] text-white/90">
               {last}
             </pre>
           )}
         </section>
       </div>
 
-      <section className="card p-4">
-        <h2 className="mb-3 text-sm font-semibold">Webhook inbox (DB)</h2>
-        <ul className="space-y-2">
+      <section className="card p-2.5">
+        <h2 className="mb-1.5 text-sm font-semibold">Webhook inbox (DB)</h2>
+        <ul className="space-y-1.5">
           {webhooks.slice(0, 12).map((w) => (
             <li
               key={w.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm"
             >
               <div className="flex items-center gap-2">
                 <Badge tone={w.status === "applied" ? "signal" : "heat"}>
@@ -198,7 +198,7 @@ export default function SystemsPage() {
         </ul>
       </section>
 
-      <section className="card mt-4 p-4 text-sm text-ink-soft">
+      <section className="card mt-2.5 p-4 text-sm text-ink-soft">
         <h2 className="mb-2 font-semibold text-ink">Hand off to Sherlock / Supabase</h2>
         <ol className="list-decimal space-y-1 pl-5">
           <li>Run <span className="mono">supabase/migrations/001_init.sql</span> in your project.</li>

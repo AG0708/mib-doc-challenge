@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { Syne, Figtree, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono, Source_Serif_4 } from "next/font/google";
 import { AppShell } from "@/components/shell/AppShell";
 import "./globals.css";
 
-const display = Syne({
+const display = Source_Serif_4({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: ["600", "700"],
 });
 
-const body = Figtree({
+const body = IBM_Plex_Sans({
   variable: "--font-body",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   weight: ["400", "500", "600"],
@@ -24,7 +24,7 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Relay — Creator Ops",
   description:
-    "Production-ready creator command center: outreach, CRM, roster, financials, and HMAC webhooks on a real database.",
+    "Creator command center: outreach, CRM, roster, financials, and HMAC webhooks on a live database.",
 };
 
 export default function RootLayout({
