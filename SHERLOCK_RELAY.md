@@ -1,5 +1,11 @@
-# Sherlock portfolio: Relay
+# Sherlock portfolio: Relay (Loom-optimized)
 
-This branch adds **`relay/`** — a Next.js creator command center demo tailored to the [Sherlock Internal Tools](https://app.notion.com/p/Sherlock-Engineering-Hire-Internal-Tools-33558be3d5398107a61fddcd1514627d) hire (Beige-shaped ops: outreach, CRM, roster, financials, analytics).
+`relay/` is a Next.js creator command center demo for the Sherlock **Internal Tools / Beige** hire.
 
-It does not change the MIB Doc Challenge contract. See `relay/README.md` to run it.
+**For the application Loom:** see `relay/LOOM.md` (3–5 min script) and use the in-app teleprompter.
+
+```bash
+cd relay && npm install && npm run dev
+```
+
+Does not change the MIB Doc Challenge contract.

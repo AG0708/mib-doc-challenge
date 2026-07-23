@@ -182,8 +182,12 @@ export default function CrmPage() {
             </div>
 
             <div className="mt-5 rounded-xl border border-dashed border-signal/40 bg-signal/5 p-3 text-sm text-ink-soft">
+              <p className="mono mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-signal-deep">
+                Loom beat · backend
+              </p>
               Web onboarding webhooks land here. HMAC-verified step updates keep
-              this record live across signup → payment → first post.
+              this record live across signup → payment → first post. Full
+              contract on <span className="font-semibold text-ink">Systems</span>.
             </div>
           </aside>
         )}

@@ -27,8 +27,8 @@ export default function PulsePage() {
     <div>
       <PageHeader
         eyebrow="Command · Pulse"
-        title="Outcomes, not vanity."
-        description="Live read on how creator content turns into app installs, unique web visits, and revenue — the loop Relay exists to close."
+        title="One loop for creator ops."
+        description="Beige-shaped command center: recruit → onboard → manage → pay — with views attributed to installs, unique web visits, and revenue. Built to demo product judgment and systems thinking for Sherlock Internal Tools."
         action={
           <div className="panel-strong flex items-center gap-3 rounded-xl px-4 py-3">
             <span className="live-dot h-2 w-2 rounded-full bg-signal" />

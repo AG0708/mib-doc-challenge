@@ -9,11 +9,13 @@ import {
   GitBranch,
   Users,
   Wallet,
+  Cpu,
   Menu,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { LoomTour } from "@/components/loom/LoomTour";
 
 const NAV = [
   { href: "/", label: "Pulse", icon: LayoutDashboard },
@@ -21,6 +23,7 @@ const NAV = [
   { href: "/crm", label: "CRM", icon: GitBranch },
   { href: "/roster", label: "Roster", icon: Users },
   { href: "/financials", label: "Financials", icon: Wallet },
+  { href: "/systems", label: "Systems", icon: Cpu },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -28,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="relative z-10 mx-auto flex min-h-screen max-w-[1440px] flex-col px-4 pb-8 pt-4 md:px-6 lg:flex-row lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
+    <div className="relative z-10 mx-auto flex min-h-screen max-w-[1440px] flex-col px-4 pb-28 pt-4 md:px-6 lg:flex-row lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
       <button
         type="button"
         className="mb-3 flex w-fit items-center gap-2 rounded-md border border-line bg-panel-strong px-3 py-2 text-sm font-medium lg:hidden"
@@ -45,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           open ? "block" : "hidden lg:block",
         )}
       >
-        <Link href="/" className="group mb-8 block" onClick={() => setOpen(false)}>
+        <Link href="/" className="group mb-6 block" onClick={() => setOpen(false)}>
           <div className="display text-[2rem] leading-none tracking-tight text-ink">
             Relay
           </div>
@@ -87,20 +90,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="mt-auto hidden pt-10 lg:block">
+        <div className="mt-auto hidden pt-8 lg:block">
           <div className="rounded-xl border border-line bg-white/55 p-3">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
               <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-signal" />
-              Live ops
+              Loom-ready
             </div>
             <p className="mt-2 text-sm leading-snug text-ink-soft">
-              Views → installs → web visits → revenue. One loop.
+              Follow the teleprompter — process first, then product.
             </p>
           </div>
         </div>
       </aside>
 
       <main className="min-w-0 flex-1">{children}</main>
+      <LoomTour />
     </div>
   );
 }
