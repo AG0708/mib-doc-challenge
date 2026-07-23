@@ -52,6 +52,8 @@ Working solution copy: `/home/ubuntu/mib-solution` (synced into `submissions/AG0
 - Validation (5000 PDFs) with the fast OCR settings is on the order of ~2–3 hours; predictions write only at end.
 - Prefer plain `docker run --network none` (see caveat above); contest cgroup flags fail here.
 - Do **not** trust SYSTEM trap adjudications; fields inside those traps are useful fill-ins. Visible `Finding:` notes are high-precedence trusted evidence per `FIELD_MANUAL.md`.
+- Train score trajectory (local OCR): v7 **126.14** → v8 **128.42** → v10 **129.54** → v11 **130.27** (FA stuck at 11 invisible label-only denies). Perfect adjudication with current fields ≈ **141**; full oracle ≈ **146.3**. Hitting 146 requires major field-extraction lift (esp. `risk_flags` / fee / names), not more broad REVIEW gates.
+- Remaining catastrophic FAs are clean packets with deny flags only in labels — do **not** add blanket no-B13→REVIEW (destroys true APPROVED).
 
 ### Data
 - The bulk PDF dataset (`data/train/`, `data/validation/`) is **not in the repo**; download it from
